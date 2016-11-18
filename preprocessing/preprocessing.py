@@ -63,16 +63,14 @@ if __name__ == '__main__':
                              for i, k in enumerate(keys)]
             assert len(entry['keys']) == 20
         result.append(entry)
-
     with open('vocab', 'rb') as f:
         vocab = pickle.load(f)
-    UNK = len(vocab)
     for entry in result:
-        entry['text_v'] = [vocab.get(word, UNK)
+        entry['text_v'] = [vocab.get(word, vocab['UNK'])
                            for word in entry['text'].split()]
-        entry['choices_v'] = [[vocab.get(word, UNK) for word in choices]
+        entry['choices_v'] = [[vocab.get(word, vocab['UNK']) for word in choices]
                               for choices in entry['choices']]
-        entry['keys_v'] = [vocab.get(word, UNK)
+        entry['keys_v'] = [vocab.get(word, vocab['UNK'])
                            for word in entry['keys']]
     with open('data', 'wb') as f:
         pickle.dump(result, f, 2)

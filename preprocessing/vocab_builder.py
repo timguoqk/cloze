@@ -13,10 +13,10 @@ for filename in FILE_NAMES:
         words |= set(text.split())
 
 d = dict(map(lambda t: t[::-1], enumerate(words)))
-KEYWORDS = ['STOP', 'NUM', 'BLANK', 'CHINESE', 'EXCLAMATION', 'QUESTION']
+KEYWORDS = ['STOP', 'NUM', 'BLANK', 'CHINESE', 'EXCLAMATION', 'QUESTION',
+            'UNK']
 for kw in KEYWORDS:
     d[kw] = len(d)
-
 
 with open('vocab', 'wb') as f:
     pickle.dump(d, f, 2)
