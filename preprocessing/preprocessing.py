@@ -1,6 +1,7 @@
 import re
 import pickle
 
+DIR = 'cloze_data/'
 PREFIXES = list(map(str, range(1, 41)))
 # PREFIXES = ['24']
 
@@ -36,6 +37,7 @@ if __name__ == '__main__':
     vocab = {}
     RE_CHOICES = re.compile(r'[A-D]\. ((?:[\w\-\'’]+ )+)')
     for p in PREFIXES:
+        p = DIR + p
         entry = {
             'text': '',
             'choices': [],
@@ -72,6 +74,5 @@ if __name__ == '__main__':
                               for choices in entry['choices']]
         entry['keys_v'] = [vocab.get(word, UNK)
                            for word in entry['keys']]
-    print(result[-1])
     with open('data', 'wb') as f:
         pickle.dump(result, f, 2)

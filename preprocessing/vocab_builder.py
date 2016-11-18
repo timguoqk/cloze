@@ -1,12 +1,13 @@
 import re
 import pickle
 
+DIR = 'books/vocab/'
 FILE_NAMES = ['NewConcepts', 'T1', 'T2']
 vocab = {}
 
 words = set()
 for filename in FILE_NAMES:
-    with open(filename) as f:
+    with open(DIR + filename) as f:
         raw = f.read()
         text = re.sub(r'[^a-zA-Z ]', ' ', raw).lower()
         words |= set(text.split())
