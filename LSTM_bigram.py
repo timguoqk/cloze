@@ -4,7 +4,7 @@ import time
 import pickle
 
 FLAGS = tf.app.flags.FLAGS
-NUM_ARTICLES = 1
+NUM_CLOZES = 1
 
 # Model Parameters
 tf.app.flags.DEFINE_integer(
@@ -125,17 +125,24 @@ class RNNLangmod():
         return tf.Variable(initial, name=name)
 
 
-def read(i):
+def read_cloze(i):
     x = np.array(data[i]['text_v'][:-1], dtype=int)
     y = np.array(data[i]['text_v'][1:], dtype=int)
     choices = data[i]['choices_v']
     keys = data[i]['keys_v']
     return x, y, choices, keys
 
+def read_training():
+    with open('books_training', 'rb') as f:
+        books_training = pickle.load(f)
+    x = np.array(books_training[:-1])
+    y = np.array(books_training[1:])
+    return x, y
+
 
 # Main Training Block
 if __name__ == "__main__":
-    with open('data', 'rb') as f:
+    with open('clozes', 'rb') as f:
         data = pickle.load(f)
     with open('vocab', 'rb') as f:
         vocab = pickle.load(f)
@@ -154,48 +161,43 @@ if __name__ == "__main__":
         # Start Training
         ex_bsz, bsz, steps = FLAGS.batch_size * \
             FLAGS.num_steps, FLAGS.batch_size, FLAGS.num_steps
+        x, y = read_training()
         for epoch in range(FLAGS.num_epochs):
-            for i in range(NUM_ARTICLES):
-                # Preprocess and vectorize the data
-                x, y, _, keys = read(i)
-                state, loss, iters, start_time = sess.run(
-                    rnn_lm.initial_state), 0., 0, time.time()
-                # TODO: HACK
-                keys_i = 0
-                for start, end in zip(range(0, len(x) - ex_bsz, ex_bsz),
-                                      range(ex_bsz, len(x), ex_bsz)):
-                    # TODO: HACK
-                    if y[start:end] == [vocab['BLANK']]:
-                        y[start:end] = [keys[keys_i]]
-                        keys_i += 1
+            # Preprocess and vectorize the data
+            state, loss, iters, start_time = sess.run(
+                rnn_lm.initial_state), 0., 0, time.time()
+            # TODO: HACK
+            # keys_i = 0
+            for start, end in zip(range(0, len(x) - ex_bsz, ex_bsz),
+                                  range(ex_bsz, len(x), ex_bsz)):
 
-                    # Build the Feed Dictionary, with inputs, outputs, dropout
-                    # probability, and states.
-                    feed_dict = {rnn_lm.X: x[start:end].reshape(bsz, steps),
-                                 rnn_lm.Y: y[start:end].reshape(bsz, steps),
-                                 rnn_lm.keep_prob: FLAGS.dropout_prob,
-                                 rnn_lm.initial_state[0]: state[0],
-                                 rnn_lm.initial_state[1]: state[1]}
+                # Build the Feed Dictionary, with inputs, outputs, dropout
+                # probability, and states.
+                feed_dict = {rnn_lm.X: x[start:end].reshape(bsz, steps),
+                             rnn_lm.Y: y[start:end].reshape(bsz, steps),
+                             rnn_lm.keep_prob: FLAGS.dropout_prob,
+                             rnn_lm.initial_state[0]: state[0],
+                             rnn_lm.initial_state[1]: state[1]}
 
-                    # Run the training operation with the Feed Dictionary,
-                    # fetch loss and update state.
-                    curr_loss, _, state = sess.run([
-                        rnn_lm.loss_val, rnn_lm.train_op,
-                        rnn_lm.final_state], feed_dict=feed_dict)
-                    # Update counters
-                    loss, iters = loss + curr_loss, iters + steps
+                # Run the training operation with the Feed Dictionary,
+                # fetch loss and update state.
+                curr_loss, _, state = sess.run([
+                    rnn_lm.loss_val, rnn_lm.train_op,
+                    rnn_lm.final_state], feed_dict=feed_dict)
+                # Update counters
+                loss, iters = loss + curr_loss, iters + steps
 
-                    # Print Evaluation Statistics
-                    if start % FLAGS.eval_every == 0:
-                        print('Epoch {} Words {}>{} Perplexity: {}. {} seconds'
-                              .format(epoch, start, end, np.exp(loss / iters),
-                                      time.time() - start_time))
-                        loss, iters = 0.0, 0
+                # Print Evaluation Statistics
+                if start % FLAGS.eval_every == 0:
+                    print('Epoch {} Words {}>{} Perplexity: {}. {} seconds'
+                          .format(epoch, start, end, np.exp(loss / iters),
+                                  time.time() - start_time))
+                    loss, iters = 0.0, 0
 
         # Evaluate Test Perplexity
         test_loss, test_iters, total_correct, total_blanks = 0., 0, 0., 0
-        for i in range(NUM_ARTICLES):
-            x, y, choices, keys = read(i)
+        for i in range(NUM_CLOZES):
+            x, y, choices, keys = read_cloze(i)
             state = sess.run(rnn_lm.initial_state)
             blank_i = 0
             for s, e in zip(range(0, len(x - ex_bsz), ex_bsz),
