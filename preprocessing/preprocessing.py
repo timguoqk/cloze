@@ -66,7 +66,7 @@ if __name__ == '__main__':
 
     with open('vocab', 'rb') as f:
         vocab = pickle.load(f)
-    UNK = len(vocab) + 1
+    UNK = len(vocab)
     for entry in result:
         entry['text_v'] = [vocab.get(word, UNK)
                            for word in entry['text'].split()]
