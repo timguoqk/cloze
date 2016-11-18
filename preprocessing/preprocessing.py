@@ -15,14 +15,17 @@ RE6 = re.compile(r'\?')
 RE7 = re.compile('[\(.,:;\)“…”，\'\n]')
 RE8 = re.compile(r'  +')
 RE9 = re.compile(r'(STOP ){2,}')
+RE10 = re.compile(r'\d+')
 
 
 def proces_text(text):
-    text = text.lower().replace('’', '').replace('-', '')
+    text = text.lower().replace('’', '')
     text = RE0.sub('NUM', text)
     text = RE1.sub(' STOP ', text)
     text = RE2.sub('a', text)
     text = RE3.sub(' BLANK ', text)
+    text = text.replace('-', ' ')
+    text = RE10.sub('NUM', text)
     text = RE4.sub(' CHINESE', text)
     text = RE5.sub(' EXCLAMATION STOP ', text)
     text = RE6.sub(' QUESTION STOP ', text)
