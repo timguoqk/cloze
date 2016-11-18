@@ -72,10 +72,10 @@ def preprocess_clozes():
         entry['text_v'] = [vocab.get(word, vocab['UNK'])
                            for word in entry['text'].split()]
         entry['choices_v'] = [
-            [vocab.get(word, vocab['UNK']) for word in choices]
+            [vocab.get(word.split()[0], vocab['UNK']) for word in choices]
             for choices in entry['choices']
         ]
-        entry['keys_v'] = [vocab.get(word, vocab['UNK'])
+        entry['keys_v'] = [vocab.get(word.split()[0], vocab['UNK'])
                            for word in entry['keys']]
     with open('clozes', 'wb') as f:
         pickle.dump(result, f, 2)
