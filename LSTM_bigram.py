@@ -4,7 +4,7 @@ import time
 import pickle
 
 FLAGS = tf.app.flags.FLAGS
-NUM_CLOZES = 1
+NUM_CLOZES = 40
 
 # Model Parameters
 tf.app.flags.DEFINE_integer(
@@ -13,9 +13,9 @@ tf.app.flags.DEFINE_integer('embedding_size', 50, 'Size of the Embeddings.')
 tf.app.flags.DEFINE_integer('hidden_size', 256, 'Size of the LSTM Layer.')
 
 # Training Parameters
-tf.app.flags.DEFINE_integer('num_epochs', 5, 'Number of Training Epochs.')
+tf.app.flags.DEFINE_integer('num_epochs', 1, 'Number of Training Epochs.')
 tf.app.flags.DEFINE_integer(
-    'batch_size', 1, 'Size of a batch (for training).')  # TODO: HACK
+    'batch_size', 20, 'Size of a batch (for training).')  # TODO: HACK
 tf.app.flags.DEFINE_float('learning_rate', 1e-4,
                           'Learning rate for Adam Optimizer.')
 tf.app.flags.DEFINE_float(
@@ -132,6 +132,7 @@ def read_cloze(i):
     keys = data[i]['keys_v']
     return x, y, choices, keys
 
+
 def read_training():
     with open('books_training', 'rb') as f:
         books_training = pickle.load(f)
@@ -202,7 +203,6 @@ if __name__ == "__main__":
             blank_i = 0
             for s, e in zip(range(0, len(x - ex_bsz), ex_bsz),
                             range(ex_bsz, len(x), ex_bsz)):
-                # TODO: BLANK
                 # Build the Feed Dictionary, with inputs, outputs, dropout
                 # probability, and states.
                 feed_dict = {rnn_lm.X: x[s:e].reshape(bsz, steps),
@@ -215,14 +215,15 @@ if __name__ == "__main__":
                 logits, curr_loss, state = sess.run([
                     rnn_lm.logits, rnn_lm.loss_val, rnn_lm.final_state],
                     feed_dict=feed_dict)
-                if y[s:e][0] == vocab['BLANK']:
-                    choices_d = {j: logits[0][j]
-                                 for j in range(len(logits[0]))
-                                 if j in choices[blank_i]}
-                    if choices_d[keys[blank_i]] == max(choices_d.values()):
-                        total_correct += 1
-                    total_blanks += 1
-                    blank_i += 1
+                for batch in range(bsz):
+                    if y[s:e][batch] == vocab['BLANK']:
+                        choices_d = {j: logits[batch][j]
+                                     for j in range(len(logits[batch]))
+                                     if j in choices[blank_i]}
+                        if choices_d[keys[blank_i]] == max(choices_d.values()):
+                            total_correct += 1
+                        total_blanks += 1
+                        blank_i += 1
 
                 # Update counters
                 test_loss += curr_loss
