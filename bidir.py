@@ -196,6 +196,7 @@ if __name__ == "__main__":
 
         # Evaluate Test Perplexity
         test_loss, test_iters, total_correct, total_blanks = 0., 0, 0., 0
+        d = {}  # error test
         for i in range(NUM_ARTICLES):
             x, y, choices, keys = read_cloze(i)
             state_fw, state_bw = sess.run(
@@ -222,14 +223,21 @@ if __name__ == "__main__":
                         choices_d = {j: logits[batch][j]
                                      for j in range(len(logits[batch]))
                                      if j in choices[blank_i]}
+                        d[(i, blank_i)] = {"logits": logits[batch],
+                                           "choices": choices_d,
+                                           "key": keys[blank_i],
+                                           "correct": False}
                         if choices_d[keys[blank_i]] == max(choices_d.values()):
                             total_correct += 1
+                            d[(i, blank_i)]["correct"] = True
                         total_blanks += 1
                         blank_i += 1
                 # Update counters
                 test_loss += curr_loss
                 test_iters += steps
 
+        with open('error_analysis_bi', 'wb') as f:
+            pickle.dump(d, f)
         # Print Final Output
         print('Test Perplexity: {}'.format(np.exp(test_loss / test_iters)))
         print('Blank Accuracy: {}'.format(total_correct / total_blanks))

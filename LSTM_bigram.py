@@ -13,7 +13,7 @@ tf.app.flags.DEFINE_integer('embedding_size', 50, 'Size of the Embeddings.')
 tf.app.flags.DEFINE_integer('hidden_size', 256, 'Size of the LSTM Layer.')
 
 # Training Parameters
-tf.app.flags.DEFINE_integer('num_epochs', 1, 'Number of Training Epochs.')
+tf.app.flags.DEFINE_integer('num_epochs', 5, 'Number of Training Epochs.')
 tf.app.flags.DEFINE_integer(
     'batch_size', 20, 'Size of a batch (for training).')
 tf.app.flags.DEFINE_float('learning_rate', 1e-4,
