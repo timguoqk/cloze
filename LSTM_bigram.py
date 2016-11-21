@@ -188,8 +188,6 @@ if __name__ == "__main__":
                 loss, iters = loss + curr_loss, iters + steps
 
                 # Print Evaluation Statistics
-                if start >= 20000:
-                    break
                 if start % FLAGS.eval_every == 0:
                     print('Epoch {} Words {}>{} Perplexity: {}. {} seconds'
                           .format(epoch, start, end, np.exp(loss / iters),
@@ -198,7 +196,7 @@ if __name__ == "__main__":
 
         # Evaluate Test Perplexity
         test_loss, test_iters, total_correct, total_blanks = 0., 0, 0., 0
-        d = {} # error test
+        d = {}  # error test
         for i in range(NUM_CLOZES):
             x, y, choices, keys = read_cloze(i)
             state = sess.run(rnn_lm.initial_state)
@@ -222,20 +220,20 @@ if __name__ == "__main__":
                                      for j in range(len(logits[batch]))
                                      if j in choices[blank_i]}
 
-                        d[(i,blank_i)] = {"logits": logits[batch],
-                                          "choices": choices_d,
-                                          "key": keys[blank_i],
-                                          "correct": False}                                    
+                        d[(i, blank_i)] = {"logits": logits[batch],
+                                           "choices": choices_d,
+                                           "key": keys[blank_i],
+                                           "correct": False}
                         if choices_d[keys[blank_i]] == max(choices_d.values()):
                             total_correct += 1
-                            d[(i,blank_i)]["correct"] = True
+                            d[(i, blank_i)]["correct"] = True
                         total_blanks += 1
                         blank_i += 1
 
                 # Update counters
                 test_loss += curr_loss
                 test_iters += steps
-        
+
         with open('error_analysis', 'wb') as f:
             pickle.dump(d, f)
         # Print Final Output
