@@ -1,10 +1,11 @@
+from tensorflow.python.ops import rnn, rnn_cell
 import numpy as np
 import tensorflow as tf
 import time
 import pickle
 
 FLAGS = tf.app.flags.FLAGS
-NUM_CLOZES = 40
+NUM_ARTICLES = 40
 
 # Model Parameters
 tf.app.flags.DEFINE_integer(
@@ -13,7 +14,7 @@ tf.app.flags.DEFINE_integer('embedding_size', 50, 'Size of the Embeddings.')
 tf.app.flags.DEFINE_integer('hidden_size', 256, 'Size of the LSTM Layer.')
 
 # Training Parameters
-tf.app.flags.DEFINE_integer('num_epochs', 1, 'Number of Training Epochs.')
+tf.app.flags.DEFINE_integer('num_epochs', 5, 'Number of Training Epochs.')
 tf.app.flags.DEFINE_integer(
     'batch_size', 20, 'Size of a batch (for training).')
 tf.app.flags.DEFINE_float('learning_rate', 1e-4,
@@ -24,20 +25,10 @@ tf.app.flags.DEFINE_integer(
     'eval_every', 10000, 'Print statistics every eval_every words.')
 
 
-class RNNLangmod():
+class BiRNN():
     def __init__(self, vocab_size, embedding_size, num_steps, hidden_size,
                  batch_size, learning_rate):
-        """
-        Instantiate an RNNLangmod Model, with the necessary hyperparameters.
 
-        :param vocab_size: Size of the vocabulary.
-        :param num_steps: Number of words to feed into LSTM before performing
-        a gradient update.
-        :param hidden_size: Size of the LSTM Layer.
-        :param num_layers: Number of stacked LSTM Layers in the model.
-        :param batch_size: Batch size (for training).
-        :param learning_rate: Learning rate for Adam Optimizer
-        """
         self.vocab_size, self.embedding_size = vocab_size, embedding_size
         self.hidden, self.num_steps = hidden_size, num_steps
         self.bsz, self.learning_rate = batch_size, learning_rate
@@ -51,7 +42,7 @@ class RNNLangmod():
         self.instantiate_weights()
 
         # Build the Inference Graph
-        self.logits, self.final_state = self.inference()
+        self.logits, self.final_states = self.inference()
 
         # Build the Loss Computation
         self.loss_val = self.loss()
@@ -65,8 +56,11 @@ class RNNLangmod():
             [self.vocab_size, self.embedding_size], 'Embedding')
 
         # Basic LSTM Cell
-        self.cell = tf.nn.rnn_cell.BasicLSTMCell(self.hidden)
-        self.initial_state = self.cell.zero_state(self.bsz, tf.float32)
+        self.fw_cell = rnn_cell.BasicLSTMCell(self.hidden)
+        self.bw_cell = rnn_cell.BasicLSTMCell(self.hidden)
+
+        self.initial_state_fw = self.fw_cell.zero_state(self.bsz, tf.float32)
+        self.initial_state_bw = self.bw_cell.zero_state(self.bsz, tf.float32)
 
         # Softmax Output
         self.softmax_w = self.weight_variable(
@@ -88,19 +82,25 @@ class RNNLangmod():
         emb = tf.nn.embedding_lookup(self.E, self.X)
         drop_emb = tf.nn.dropout(emb, self.keep_prob)
 
+        # TODO: ask TA
+        sequence_len = np.ones(self.bsz)
         # Feed input through dynamic_rnn
         # Shape [bsz, steps, hidden]
-        out, f_state = tf.nn.dynamic_rnn(self.cell, drop_emb,
-                                         initial_state=self.initial_state)
-
+        outs, f_states = rnn.bidirectional_dynamic_rnn(
+            self.fw_cell, self.bw_cell, drop_emb,
+            sequence_length=sequence_len,
+            initial_state_fw=self.initial_state_fw,
+            initial_state_bw=self.initial_state_bw)
         # Reshape the outputs into a single 2D Tensor
         # Shape [bsz * steps, hidden]
+        # TODO: check
+        out = (outs[0] + outs[1]) / 2
         outputs = tf.reshape(out, [-1, self.hidden])
 
         # Feed through final layer, compute logits
         logits = tf.matmul(outputs, self.softmax_w) + \
             self.softmax_b   # Shape [bsz * steps, vocab]
-        return logits, f_state
+        return logits, f_states
 
     def loss(self):
         seq_loss = tf.nn.seq2seq.sequence_loss_by_example(
@@ -141,7 +141,6 @@ def read_training():
     return x, y
 
 
-# Main Training Block
 if __name__ == "__main__":
     with open('clozes', 'rb') as f:
         clozes_data = pickle.load(f)
@@ -152,9 +151,9 @@ if __name__ == "__main__":
     print('Launching Tensorflow Session')
     with tf.Session() as sess:
         # Instantiate Model
-        rnn_lm = RNNLangmod(len(vocab), FLAGS.embedding_size, FLAGS.num_steps,
-                            FLAGS.hidden_size, FLAGS.batch_size,
-                            FLAGS.learning_rate)
+        birnn = BiRNN(len(vocab), FLAGS.embedding_size, FLAGS.num_steps,
+                      FLAGS.hidden_size, FLAGS.batch_size,
+                      FLAGS.learning_rate)
 
         # Initialize all Variables
         sess.run(tf.initialize_all_variables())
@@ -164,26 +163,27 @@ if __name__ == "__main__":
             FLAGS.num_steps, FLAGS.batch_size, FLAGS.num_steps
         x, y = read_training()
         for epoch in range(FLAGS.num_epochs):
-            # Preprocess and vectorize the data
-            state, loss, iters, start_time = sess.run(
-                rnn_lm.initial_state), 0., 0, time.time()
+            state_fw, state_bw = sess.run(
+                [birnn.initial_state_fw, birnn.initial_state_bw])
+            loss, iters, start_time = 0., 0, time.time()
 
             for start, end in zip(range(0, len(x) - ex_bsz, ex_bsz),
                                   range(ex_bsz, len(x), ex_bsz)):
-
                 # Build the Feed Dictionary, with inputs, outputs, dropout
                 # probability, and states.
-                feed_dict = {rnn_lm.X: x[start:end].reshape(bsz, steps),
-                             rnn_lm.Y: y[start:end].reshape(bsz, steps),
-                             rnn_lm.keep_prob: FLAGS.dropout_prob,
-                             rnn_lm.initial_state[0]: state[0],
-                             rnn_lm.initial_state[1]: state[1]}
+                feed_dict = {birnn.X: x[start:end].reshape(bsz, steps),
+                             birnn.Y: y[start:end].reshape(bsz, steps),
+                             birnn.keep_prob: FLAGS.dropout_prob,
+                             birnn.initial_state_fw[0]: state_fw[0],
+                             birnn.initial_state_fw[1]: state_fw[1],
+                             birnn.initial_state_bw[0]: state_bw[0],
+                             birnn.initial_state_bw[1]: state_bw[1]}
 
                 # Run the training operation with the Feed Dictionary,
                 # fetch loss and update state.
-                curr_loss, _, state = sess.run([
-                    rnn_lm.loss_val, rnn_lm.train_op,
-                    rnn_lm.final_state], feed_dict=feed_dict)
+                curr_loss, _, (state_fw, state_bw) = sess.run([
+                    birnn.loss_val, birnn.train_op,
+                    birnn.final_states], feed_dict=feed_dict)
                 # Update counters
                 loss, iters = loss + curr_loss, iters + steps
 
@@ -196,23 +196,26 @@ if __name__ == "__main__":
 
         # Evaluate Test Perplexity
         test_loss, test_iters, total_correct, total_blanks = 0., 0, 0., 0
-        for i in range(NUM_CLOZES):
+        for i in range(NUM_ARTICLES):
             x, y, choices, keys = read_cloze(i)
-            state = sess.run(rnn_lm.initial_state)
+            state_fw, state_bw = sess.run(
+                [birnn.initial_state_fw, birnn.initial_state_bw])
             blank_i = 0
             for s, e in zip(range(0, len(x - ex_bsz), ex_bsz),
                             range(ex_bsz, len(x), ex_bsz)):
                 # Build the Feed Dictionary, with inputs, outputs, dropout
                 # probability, and states.
-                feed_dict = {rnn_lm.X: x[s:e].reshape(bsz, steps),
-                             rnn_lm.Y: y[s:e].reshape(bsz, steps),
-                             rnn_lm.keep_prob: 1.0,
-                             rnn_lm.initial_state[0]: state[0],
-                             rnn_lm.initial_state[1]: state[1]}
+                feed_dict = {birnn.X: x[s:e].reshape(bsz, steps),
+                             birnn.Y: y[s:e].reshape(bsz, steps),
+                             birnn.keep_prob: FLAGS.dropout_prob,
+                             birnn.initial_state_fw[0]: state_fw[0],
+                             birnn.initial_state_fw[1]: state_fw[1],
+                             birnn.initial_state_bw[0]: state_bw[0],
+                             birnn.initial_state_bw[1]: state_bw[1]}
 
                 # Fetch the loss, and final state
-                logits, curr_loss, state = sess.run([
-                    rnn_lm.logits, rnn_lm.loss_val, rnn_lm.final_state],
+                logits, curr_loss, (state_fw, state_bw) = sess.run([
+                    birnn.logits, birnn.loss_val, birnn.final_states],
                     feed_dict=feed_dict)
                 for batch in range(bsz):
                     if y[s:e][batch] == vocab['BLANK']:
@@ -223,7 +226,6 @@ if __name__ == "__main__":
                             total_correct += 1
                         total_blanks += 1
                         blank_i += 1
-
                 # Update counters
                 test_loss += curr_loss
                 test_iters += steps
