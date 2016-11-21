@@ -16,13 +16,14 @@ tf.app.flags.DEFINE_integer('hidden_size', 256, 'Size of the LSTM Layer.')
 # Training Parameters
 tf.app.flags.DEFINE_integer('num_epochs', 5, 'Number of Training Epochs.')
 tf.app.flags.DEFINE_integer(
-    'batch_size', 1, 'Size of a batch (for training).')  # TODO: HACK
+    'batch_size', 20, 'Size of a batch (for training).')
 tf.app.flags.DEFINE_float('learning_rate', 1e-4,
                           'Learning rate for Adam Optimizer.')
 tf.app.flags.DEFINE_float(
     'dropout_prob', 0.5, 'Keep probability, for dropout.')
 tf.app.flags.DEFINE_integer(
     'eval_every', 10000, 'Print statistics every eval_every words.')
+
 
 class BiRNN():
     def __init__(self, vocab_size, embedding_size, num_steps, hidden_size,
@@ -85,10 +86,11 @@ class BiRNN():
         sequence_len = np.ones(self.bsz)
         # Feed input through dynamic_rnn
         # Shape [bsz, steps, hidden]
-        outs, f_states = rnn.bidirectional_dynamic_rnn(self.fw_cell, self.bw_cell, drop_emb, 
-                                              sequence_length = sequence_len,
-                                              initial_state_fw = self.initial_state_fw, 
-                                              initial_state_bw = self.initial_state_bw)
+        outs, f_states = rnn.bidirectional_dynamic_rnn(
+            self.fw_cell, self.bw_cell, drop_emb,
+            sequence_length=sequence_len,
+            initial_state_fw=self.initial_state_fw,
+            initial_state_bw=self.initial_state_bw)
         # Reshape the outputs into a single 2D Tensor
         # Shape [bsz * steps, hidden]
         # TODO: check
@@ -122,17 +124,26 @@ class BiRNN():
         initial = tf.constant(0.1, shape=shape)
         return tf.Variable(initial, name=name)
 
-def read(i):
-    x = np.array(data[i]['text_v'][:-1], dtype=int)
-    y = np.array(data[i]['text_v'][1:], dtype=int)
-    choices = data[i]['choices_v']
-    keys = data[i]['keys_v']
+
+def read_cloze(i):
+    x = np.array(clozes_data[i]['text_v'][:-1], dtype=int)
+    y = np.array(clozes_data[i]['text_v'][1:], dtype=int)
+    choices = clozes_data[i]['choices_v']
+    keys = clozes_data[i]['keys_v']
     return x, y, choices, keys
 
-# Main Training Block
+
+def read_training():
+    with open('books_training', 'rb') as f:
+        books_training = pickle.load(f)
+    x = np.array(books_training[:-1])
+    y = np.array(books_training[1:])
+    return x, y
+
+
 if __name__ == "__main__":
-    with open('data', 'rb') as f:
-        data = pickle.load(f)
+    with open('clozes', 'rb') as f:
+        clozes_data = pickle.load(f)
     with open('vocab', 'rb') as f:
         vocab = pickle.load(f)
 
@@ -141,8 +152,8 @@ if __name__ == "__main__":
     with tf.Session() as sess:
         # Instantiate Model
         birnn = BiRNN(len(vocab), FLAGS.embedding_size, FLAGS.num_steps,
-                            FLAGS.hidden_size, FLAGS.batch_size,
-                            FLAGS.learning_rate)
+                      FLAGS.hidden_size, FLAGS.batch_size,
+                      FLAGS.learning_rate)
 
         # Initialize all Variables
         sess.run(tf.initialize_all_variables())
@@ -150,54 +161,48 @@ if __name__ == "__main__":
         # Start Training
         ex_bsz, bsz, steps = FLAGS.batch_size * \
             FLAGS.num_steps, FLAGS.batch_size, FLAGS.num_steps
+        x, y = read_training()
         for epoch in range(FLAGS.num_epochs):
-            for i in range(NUM_ARTICLES):
-                # Preprocess and vectorize the data
-                x, y, _, keys = read(i)
-                state_fw, state_bw = sess.run([birnn.initial_state_fw, birnn.initial_state_bw])
-                loss, iters, start_time = 0., 0, time.time()
-                # TODO: HACK
-                keys_i = 0
-                for start, end in zip(range(0, len(x) - ex_bsz, ex_bsz),
-                                      range(ex_bsz, len(x), ex_bsz)):
-                    # TODO: HACK
-                    if y[start:end] == [vocab['BLANK']]:
-                        y[start:end] = [keys[keys_i]]
-                        keys_i += 1
+            state_fw, state_bw = sess.run(
+                [birnn.initial_state_fw, birnn.initial_state_bw])
+            loss, iters, start_time = 0., 0, time.time()
 
-                    # Build the Feed Dictionary, with inputs, outputs, dropout
-                    # probability, and states.
-                    feed_dict = {birnn.X: x[start:end].reshape(bsz, steps),
-                                 birnn.Y: y[start:end].reshape(bsz, steps),
-                                 birnn.keep_prob: FLAGS.dropout_prob,
-                                 birnn.initial_state_fw[0]: state_fw[0],
-                                 birnn.initial_state_fw[1]: state_fw[1],
-                                 birnn.initial_state_bw[0]: state_bw[0],
-                                 birnn.initial_state_bw[1]: state_bw[1]}
+            for start, end in zip(range(0, len(x) - ex_bsz, ex_bsz),
+                                  range(ex_bsz, len(x), ex_bsz)):
+                # Build the Feed Dictionary, with inputs, outputs, dropout
+                # probability, and states.
+                feed_dict = {birnn.X: x[start:end].reshape(bsz, steps),
+                             birnn.Y: y[start:end].reshape(bsz, steps),
+                             birnn.keep_prob: FLAGS.dropout_prob,
+                             birnn.initial_state_fw[0]: state_fw[0],
+                             birnn.initial_state_fw[1]: state_fw[1],
+                             birnn.initial_state_bw[0]: state_bw[0],
+                             birnn.initial_state_bw[1]: state_bw[1]}
 
-                    # Run the training operation with the Feed Dictionary,
-                    # fetch loss and update state.
-                    curr_loss, _, (state_fw, state_bw) = sess.run([
-                        birnn.loss_val, birnn.train_op,
-                        birnn.final_states], feed_dict=feed_dict)
-                    # Update counters
-                    loss, iters = loss + curr_loss, iters + steps
+                # Run the training operation with the Feed Dictionary,
+                # fetch loss and update state.
+                curr_loss, _, (state_fw, state_bw) = sess.run([
+                    birnn.loss_val, birnn.train_op,
+                    birnn.final_states], feed_dict=feed_dict)
+                # Update counters
+                loss, iters = loss + curr_loss, iters + steps
 
-                    # Print Evaluation Statistics
-                    if start % FLAGS.eval_every == 0:
-                        print('Epoch {} Words {}>{} Perplexity: {}. {} seconds'
-                              .format(epoch, start, end, np.exp(loss / iters),
-                                      time.time() - start_time))
-                        loss, iters = 0.0, 0
+                # Print Evaluation Statistics
+                if start % FLAGS.eval_every == 0:
+                    print('Epoch {} Words {}>{} Perplexity: {}. {} seconds'
+                          .format(epoch, start, end, np.exp(loss / iters),
+                                  time.time() - start_time))
+                    loss, iters = 0.0, 0
+
         # Evaluate Test Perplexity
         test_loss, test_iters, total_correct, total_blanks = 0., 0, 0., 0
         for i in range(NUM_ARTICLES):
-            x, y, choices, keys = read(i)
-            state_fw, state_bw = sess.run([birnn.initial_state_fw, birnn.initial_state_bw])
+            x, y, choices, keys = read_cloze(i)
+            state_fw, state_bw = sess.run(
+                [birnn.initial_state_fw, birnn.initial_state_bw])
             blank_i = 0
             for s, e in zip(range(0, len(x - ex_bsz), ex_bsz),
                             range(ex_bsz, len(x), ex_bsz)):
-                # TODO: BLANK
                 # Build the Feed Dictionary, with inputs, outputs, dropout
                 # probability, and states.
                 feed_dict = {birnn.X: x[s:e].reshape(bsz, steps),
@@ -212,15 +217,15 @@ if __name__ == "__main__":
                 logits, curr_loss, (state_fw, state_bw) = sess.run([
                     birnn.logits, birnn.loss_val, birnn.final_states],
                     feed_dict=feed_dict)
-                if y[s:e][0] == vocab['BLANK']:
-                    choices_d = {j: logits[0][j]
-                                 for j in range(len(logits[0]))
-                                 if j in choices[blank_i]}
-                    if choices_d[keys[blank_i]] == max(choices_d.values()):
-                        total_correct += 1
-                    total_blanks += 1
-                    blank_i += 1
-
+                for batch in range(bsz):
+                    if y[s:e][batch] == vocab['BLANK']:
+                        choices_d = {j: logits[batch][j]
+                                     for j in range(len(logits[batch]))
+                                     if j in choices[blank_i]}
+                        if choices_d[keys[blank_i]] == max(choices_d.values()):
+                            total_correct += 1
+                        total_blanks += 1
+                        blank_i += 1
                 # Update counters
                 test_loss += curr_loss
                 test_iters += steps
