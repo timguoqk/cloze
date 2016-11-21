@@ -11,5 +11,7 @@
 
 - attention-over-attention
 
+- num-step
+
 ## Experiments
 - stemming?

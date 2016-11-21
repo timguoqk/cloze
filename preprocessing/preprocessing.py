@@ -1,7 +1,9 @@
+import os
 import re
 import pickle
 
-DIR = 'cloze_data/'
+CLOZES_DIR = 'cloze_data/'
+BOOKS_DIR = 'books/'
 PREFIXES = list(map(str, range(1, 41)))
 # PREFIXES = ['24']
 
@@ -35,12 +37,11 @@ def proces_text(text):
     return text
 
 
-if __name__ == '__main__':
+def preprocess_clozes():
     result = []
-    vocab = {}
     RE_CHOICES = re.compile(r'[A-D]\. ((?:[\w\-\'’]+ )+)')
     for p in PREFIXES:
-        p = DIR + p
+        p = CLOZES_DIR + p
         entry = {
             'text': '',
             'choices': [],
@@ -66,14 +67,35 @@ if __name__ == '__main__':
                              for i, k in enumerate(keys)]
             assert len(entry['keys']) == 20
         result.append(entry)
-    with open('vocab', 'rb') as f:
-        vocab = pickle.load(f)
+
     for entry in result:
         entry['text_v'] = [vocab.get(word, vocab['UNK'])
                            for word in entry['text'].split()]
-        entry['choices_v'] = [[vocab.get(word, vocab['UNK']) for word in choices]
-                              for choices in entry['choices']]
-        entry['keys_v'] = [vocab.get(word, vocab['UNK'])
+        entry['choices_v'] = [
+            [vocab.get(word.split()[0], vocab['UNK']) for word in choices]
+            for choices in entry['choices']
+        ]
+        entry['keys_v'] = [vocab.get(word.split()[0], vocab['UNK'])
                            for word in entry['keys']]
-    with open('data', 'wb') as f:
+    with open('clozes', 'wb') as f:
         pickle.dump(result, f, 2)
+
+
+def preprocess_books():
+    filenames = [f for f in os.listdir(BOOKS_DIR)
+                 if os.path.isfile(BOOKS_DIR + f)]
+    res = ''
+    for fname in filenames:
+        with open(BOOKS_DIR + fname) as f:
+            res += proces_text(f.read()) + ' STOP '
+    vec_res = [vocab.get(word, vocab['UNK']) for word in res.split()]
+    with open('books_training', 'wb') as f:
+        pickle.dump(vec_res, f, 2)
+
+
+if __name__ == '__main__':
+    with open('vocab', 'rb') as f:
+        vocab = pickle.load(f)
+
+    preprocess_clozes()
+    preprocess_books()
