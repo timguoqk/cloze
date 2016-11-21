@@ -15,7 +15,7 @@ tf.app.flags.DEFINE_integer('hidden_size', 256, 'Size of the LSTM Layer.')
 # Training Parameters
 tf.app.flags.DEFINE_integer('num_epochs', 1, 'Number of Training Epochs.')
 tf.app.flags.DEFINE_integer(
-    'batch_size', 20, 'Size of a batch (for training).')  # TODO: HACK
+    'batch_size', 20, 'Size of a batch (for training).')
 tf.app.flags.DEFINE_float('learning_rate', 1e-4,
                           'Learning rate for Adam Optimizer.')
 tf.app.flags.DEFINE_float(
@@ -126,10 +126,10 @@ class RNNLangmod():
 
 
 def read_cloze(i):
-    x = np.array(data[i]['text_v'][:-1], dtype=int)
-    y = np.array(data[i]['text_v'][1:], dtype=int)
-    choices = data[i]['choices_v']
-    keys = data[i]['keys_v']
+    x = np.array(clozes_data[i]['text_v'][:-1], dtype=int)
+    y = np.array(clozes_data[i]['text_v'][1:], dtype=int)
+    choices = clozes_data[i]['choices_v']
+    keys = clozes_data[i]['keys_v']
     return x, y, choices, keys
 
 
@@ -144,7 +144,7 @@ def read_training():
 # Main Training Block
 if __name__ == "__main__":
     with open('clozes', 'rb') as f:
-        data = pickle.load(f)
+        clozes_data = pickle.load(f)
     with open('vocab', 'rb') as f:
         vocab = pickle.load(f)
 
@@ -167,8 +167,7 @@ if __name__ == "__main__":
             # Preprocess and vectorize the data
             state, loss, iters, start_time = sess.run(
                 rnn_lm.initial_state), 0., 0, time.time()
-            # TODO: HACK
-            # keys_i = 0
+
             for start, end in zip(range(0, len(x) - ex_bsz, ex_bsz),
                                   range(ex_bsz, len(x), ex_bsz)):
 

@@ -2,7 +2,7 @@ import re
 import pickle
 
 DIR = 'books/vocab/'
-FILE_NAMES = ['NewConcepts', 'T1', 'T2']
+FILE_NAMES = ['NewConcepts', 'T1', 'T2', 'CST4']
 vocab = {}
 
 words = set()
