@@ -13,7 +13,7 @@ tf.app.flags.DEFINE_integer('embedding_size', 50, 'Size of the Embeddings.')
 tf.app.flags.DEFINE_integer('hidden_size', 256, 'Size of the LSTM Layer.')
 
 # Training Parameters
-tf.app.flags.DEFINE_integer('num_epochs', 5, 'Number of Training Epochs.')
+tf.app.flags.DEFINE_integer('num_epochs', 2, 'Number of Training Epochs.')
 tf.app.flags.DEFINE_integer(
     'batch_size', 20, 'Size of a batch (for training).')
 tf.app.flags.DEFINE_float('learning_rate', 1e-4,
@@ -22,6 +22,19 @@ tf.app.flags.DEFINE_float(
     'dropout_prob', 0.5, 'Keep probability, for dropout.')
 tf.app.flags.DEFINE_integer(
     'eval_every', 10000, 'Print statistics every eval_every words.')
+
+
+def variable_summaries(var, name):
+    """Attach a lot of summaries to a Tensor."""
+    with tf.name_scope('summaries'):
+        mean = tf.reduce_mean(var)
+        tf.scalar_summary('mean/' + name, mean)
+        with tf.name_scope('stddev'):
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+        tf.scalar_summary('stddev/' + name, stddev)
+        tf.scalar_summary('max/' + name, tf.reduce_max(var))
+        tf.scalar_summary('min/' + name, tf.reduce_min(var))
+        tf.histogram_summary(name, var)
 
 
 class RNNLangmod():
@@ -58,6 +71,9 @@ class RNNLangmod():
 
         # Build the Training Operation
         self.train_op = self.train()
+
+        # Summaries for Tensorboard
+        self.summaries = tf.merge_all_summaries()
 
     def instantiate_weights(self):
         # Embedding Matrix
@@ -100,6 +116,7 @@ class RNNLangmod():
         # Feed through final layer, compute logits
         logits = tf.matmul(outputs, self.softmax_w) + \
             self.softmax_b   # Shape [bsz * steps, vocab]
+        variable_summaries(logits, 'logits')
         return logits, f_state
 
     def loss(self):
@@ -108,6 +125,7 @@ class RNNLangmod():
             [tf.reshape(self.Y, [-1])],
             [tf.ones([self.bsz * self.num_steps])])
         loss = tf.reduce_sum(seq_loss) / self.bsz
+        tf.scalar_summary('loss', loss)
         return loss
 
     def train(self):
@@ -117,12 +135,16 @@ class RNNLangmod():
     @staticmethod
     def weight_variable(shape, name):
         initial = tf.truncated_normal(shape, stddev=0.1)
-        return tf.Variable(initial, name=name)
+        var = tf.Variable(initial, name=name)
+        variable_summaries(var, name)
+        return var
 
     @staticmethod
     def bias_variable(shape, name):
         initial = tf.constant(0.1, shape=shape)
-        return tf.Variable(initial, name=name)
+        var = tf.Variable(initial, name=name)
+        variable_summaries(var, name)
+        return var
 
 
 def read_cloze(i):
@@ -141,13 +163,79 @@ def read_training():
     return x, y
 
 
+test_step_counter = 0
+
+
+def test(rnn_lm, sess, saved_trace=False):
+    global test_step_counter
+    # Evaluate Test Perplexity
+    test_loss, test_iters, total_correct, total_blanks = 0., 0, 0., 0
+    d = {}  # error test
+    for i in range(NUM_CLOZES):
+        x, y, choices, keys = read_cloze(i)
+        state = sess.run(rnn_lm.initial_state)
+        blank_i = 0
+        for s, e in zip(range(0, len(x - ex_bsz), ex_bsz),
+                        range(ex_bsz, len(x), ex_bsz)):
+            # Build the Feed Dictionary, with inputs, outputs, dropout
+            # probability, and states.
+            feed_dict = {rnn_lm.X: x[s:e].reshape(bsz, steps),
+                         rnn_lm.Y: y[s:e].reshape(bsz, steps),
+                         rnn_lm.keep_prob: 1.0,
+                         rnn_lm.initial_state[0]: state[0],
+                         rnn_lm.initial_state[1]: state[1]}
+            # Fetch the logits, loss, and final state
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
+
+            logits, curr_loss, state, summaries = sess.run([
+                rnn_lm.logits, rnn_lm.loss_val, rnn_lm.final_state,
+                rnn_lm.summaries],
+                feed_dict=feed_dict,
+                options=run_options,
+                run_metadata=run_metadata)
+
+            test_writer.add_summary(summaries, (test_step_counter + s))
+            for batch in range(bsz):
+                if y[s:e][batch] == vocab['BLANK']:
+                    choices_d = {j: logits[batch][j]
+                                 for j in range(len(logits[batch]))
+                                 if j in choices[blank_i]}
+                    if saved_trace:
+                        d[(i, blank_i)] = {"logits": logits[batch],
+                                           "choices": choices_d,
+                                           "key": keys[blank_i],
+                                           "correct": False}
+                    if choices_d[keys[blank_i]] == max(choices_d.values()):
+                        total_correct += 1
+                        if saved_trace:
+                            d[(i, blank_i)]["correct"] = True
+                    total_blanks += 1
+                    blank_i += 1
+
+            # Update counters
+            test_loss += curr_loss
+            test_iters += steps
+        test_step_counter = test_step_counter + len(x)
+
+    if saved_trace:
+        with open('error_analysis', 'wb') as f:
+            pickle.dump(d, f)
+    # Print Final Output
+    print('Test Perplexity: {}'.format(np.exp(test_loss / test_iters)))
+    print('Blank Accuracy: {}'.format(total_correct / total_blanks))
+
+
+# Global variables
+ex_bsz, bsz, steps = FLAGS.batch_size * \
+    FLAGS.num_steps, FLAGS.batch_size, FLAGS.num_steps
+with open('clozes', 'rb') as f:
+    clozes_data = pickle.load(f)
+with open('vocab', 'rb') as f:
+    vocab = pickle.load(f)
+
 # Main Training Block
 if __name__ == "__main__":
-    with open('clozes', 'rb') as f:
-        clozes_data = pickle.load(f)
-    with open('vocab', 'rb') as f:
-        vocab = pickle.load(f)
-
     # Launch Tensorflow Session
     print('Launching Tensorflow Session')
     with tf.Session() as sess:
@@ -156,13 +244,18 @@ if __name__ == "__main__":
                             FLAGS.hidden_size, FLAGS.batch_size,
                             FLAGS.learning_rate)
 
+        # Tensorboard writers
+        train_writer = tf.train.SummaryWriter('./tensorboard/train',
+                                              sess.graph)
+        test_writer = tf.train.SummaryWriter('./tensorboard/test', sess.graph)
+
         # Initialize all Variables
         sess.run(tf.initialize_all_variables())
 
         # Start Training
-        ex_bsz, bsz, steps = FLAGS.batch_size * \
-            FLAGS.num_steps, FLAGS.batch_size, FLAGS.num_steps
         x, y = read_training()
+        # TODO
+        x = x[:20000]
         for epoch in range(FLAGS.num_epochs):
             # Preprocess and vectorize the data
             state, loss, iters, start_time = sess.run(
@@ -181,9 +274,25 @@ if __name__ == "__main__":
 
                 # Run the training operation with the Feed Dictionary,
                 # fetch loss and update state.
-                curr_loss, _, state = sess.run([
-                    rnn_lm.loss_val, rnn_lm.train_op,
-                    rnn_lm.final_state], feed_dict=feed_dict)
+                if start % 200 == 0:
+                    run_options = tf.RunOptions(
+                        trace_level=tf.RunOptions.FULL_TRACE)
+                    run_metadata = tf.RunMetadata()
+
+                    curr_loss, _, state, summaries = sess.run([
+                        rnn_lm.loss_val, rnn_lm.train_op,
+                        rnn_lm.final_state, rnn_lm.summaries],
+                        feed_dict=feed_dict,
+                        options=run_options,
+                        run_metadata=run_metadata)
+
+                    train_writer.add_summary(
+                        summaries, (epoch * len(x) + start))
+                else:
+                    curr_loss, _, state = sess.run([
+                        rnn_lm.loss_val, rnn_lm.train_op,
+                        rnn_lm.final_state],
+                        feed_dict=feed_dict)
                 # Update counters
                 loss, iters = loss + curr_loss, iters + steps
 
@@ -193,49 +302,8 @@ if __name__ == "__main__":
                           .format(epoch, start, end, np.exp(loss / iters),
                                   time.time() - start_time))
                     loss, iters = 0.0, 0
+                    test(rnn_lm, sess)
+        test(rnn_lm, sess, saved_trace=True)
 
-        # Evaluate Test Perplexity
-        test_loss, test_iters, total_correct, total_blanks = 0., 0, 0., 0
-        d = {}  # error test
-        for i in range(NUM_CLOZES):
-            x, y, choices, keys = read_cloze(i)
-            state = sess.run(rnn_lm.initial_state)
-            blank_i = 0
-            for s, e in zip(range(0, len(x - ex_bsz), ex_bsz),
-                            range(ex_bsz, len(x), ex_bsz)):
-                # Build the Feed Dictionary, with inputs, outputs, dropout
-                # probability, and states.
-                feed_dict = {rnn_lm.X: x[s:e].reshape(bsz, steps),
-                             rnn_lm.Y: y[s:e].reshape(bsz, steps),
-                             rnn_lm.keep_prob: 1.0,
-                             rnn_lm.initial_state[0]: state[0],
-                             rnn_lm.initial_state[1]: state[1]}
-                # Fetch the loss, and final state
-                logits, curr_loss, state = sess.run([
-                    rnn_lm.logits, rnn_lm.loss_val, rnn_lm.final_state],
-                    feed_dict=feed_dict)
-                for batch in range(bsz):
-                    if y[s:e][batch] == vocab['BLANK']:
-                        choices_d = {j: logits[batch][j]
-                                     for j in range(len(logits[batch]))
-                                     if j in choices[blank_i]}
-
-                        d[(i, blank_i)] = {"logits": logits[batch],
-                                           "choices": choices_d,
-                                           "key": keys[blank_i],
-                                           "correct": False}
-                        if choices_d[keys[blank_i]] == max(choices_d.values()):
-                            total_correct += 1
-                            d[(i, blank_i)]["correct"] = True
-                        total_blanks += 1
-                        blank_i += 1
-
-                # Update counters
-                test_loss += curr_loss
-                test_iters += steps
-
-        with open('error_analysis', 'wb') as f:
-            pickle.dump(d, f)
-        # Print Final Output
-        print('Test Perplexity: {}'.format(np.exp(test_loss / test_iters)))
-        print('Blank Accuracy: {}'.format(total_correct / total_blanks))
+        train_writer.close()
+        test_writer.close()
