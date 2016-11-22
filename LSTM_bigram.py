@@ -84,6 +84,16 @@ class RNNLangmod():
         self.cell = tf.nn.rnn_cell.BasicLSTMCell(self.hidden)
         self.initial_state = self.cell.zero_state(self.bsz, tf.float32)
 
+        # Conv hidden layer
+        self.hidden1_w = self.weight_variable(
+            [self.hidden, self.hidden * 2], 'Hidden1_Weight')
+        self.hidden1_b = self.weight_variable(
+            [self.hidden * 2], 'Hidden1_Bias')
+        self.hidden2_w = self.weight_variable(
+            [self.hidden * 2, self.hidden], 'Hidden2_Weight')
+        self.hidden2_b = self.weight_variable(
+            [self.hidden], 'Hidden2_Bias')
+
         # Softmax Output
         self.softmax_w = self.weight_variable(
             [self.hidden, self.vocab_size], 'Softmax_Weight')
@@ -113,10 +123,12 @@ class RNNLangmod():
         # Shape [bsz * steps, hidden]
         outputs = tf.reshape(out, [-1, self.hidden])
 
+        h1 = tf.nn.relu(tf.matmul(outputs, self.hidden1_w) + self.hidden1_b)
+        h2 = tf.nn.relu(tf.matmul(h1, self.hidden2_w) + self.hidden2_b)
+
         # Feed through final layer, compute logits
-        logits = tf.matmul(outputs, self.softmax_w) + \
-            self.softmax_b   # Shape [bsz * steps, vocab]
-        variable_summaries(logits, 'logits')
+        # Shape [bsz * steps, vocab]
+        logits = tf.matmul(h2, self.softmax_w) + self.softmax_b
         return logits, f_state
 
     def loss(self):
