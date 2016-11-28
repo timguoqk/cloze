@@ -88,9 +88,19 @@ class BiRNN():
         self.initial_state_fw = self.fw_cell.zero_state(self.bsz, tf.float32)
         self.initial_state_bw = self.bw_cell.zero_state(self.bsz, tf.float32)
 
+        # Conv hidden layer
+        self.hidden1_w = self.weight_variable(
+            [self.hidden * 2, self.hidden * 3], 'Hidden1_Weight')
+        self.hidden1_b = self.weight_variable(
+            [self.hidden * 3], 'Hidden1_Bias')
+        self.hidden2_w = self.weight_variable(
+            [self.hidden * 3, self.hidden], 'Hidden2_Weight')
+        self.hidden2_b = self.weight_variable(
+            [self.hidden], 'Hidden2_Bias')
+
         # Softmax Output
         self.softmax_w = self.weight_variable(
-            [self.hidden * 2, self.vocab_size], 'Softmax_Weight')
+            [self.hidden, self.vocab_size], 'Softmax_Weight')
         self.softmax_b = self.weight_variable(
             [self.vocab_size], 'Softmax_Bias')
 
@@ -121,9 +131,12 @@ class BiRNN():
         # Shape [bsz * steps, 2 * hidden]
         outputs = tf.reshape(tf.concat(0, outs), [-1, 2 * self.hidden])
 
+        h1 = tf.nn.relu(tf.matmul(outputs, self.hidden1_w) + self.hidden1_b)
+        h2 = tf.nn.relu(tf.matmul(h1, self.hidden2_w) + self.hidden2_b)
+
         # Feed through final layer, compute logits
-        logits = tf.matmul(outputs, self.softmax_w) + \
-            self.softmax_b   # Shape [bsz * steps, vocab]
+        # Shape [bsz * steps, vocab]
+        logits = tf.matmul(h2, self.softmax_w) + self.softmax_b
         return logits, f_states
 
     def loss(self):
