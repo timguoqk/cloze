@@ -267,8 +267,7 @@ if __name__ == "__main__":
             # Preprocess and vectorize the data
             state_fw, state_bw = sess.run(
                 [birnn.initial_state_fw, birnn.initial_state_bw])
-            loss, iters, start_time = sess.run(
-                birnn.initial_state), 0., 0, time.time()
+            loss, iters, start_time = 0., 0, time.time()
 
             for start, end in zip(range(0, len(x) - ex_bsz, ex_bsz),
                                   range(ex_bsz, len(x), ex_bsz)):
@@ -290,9 +289,9 @@ if __name__ == "__main__":
                         trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
 
-                    curr_loss, _, state, summaries = sess.run([
+                    curr_loss, _, (state_fw, state_bw), summaries = sess.run([
                         birnn.loss_val, birnn.train_op,
-                        birnn.final_state, birnn.summaries],
+                        birnn.final_states, birnn.summaries],
                         feed_dict=feed_dict,
                         options=run_options,
                         run_metadata=run_metadata)
