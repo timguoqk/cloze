@@ -1,3 +1,4 @@
+from tensorflow.python.ops import rnn, rnn_cell
 import numpy as np
 import tensorflow as tf
 import time
@@ -37,7 +38,7 @@ def variable_summaries(var, name):
         tf.histogram_summary(name, var)
 
 
-class RNNLangmod():
+class BiRNN():
     def __init__(self, vocab_size, embedding_size, num_steps, hidden_size,
                  batch_size, learning_rate):
         """
@@ -64,7 +65,7 @@ class RNNLangmod():
         self.instantiate_weights()
 
         # Build the Inference Graph
-        self.logits, self.final_state = self.inference()
+        self.logits, self.final_states = self.inference()
 
         # Build the Loss Computation
         self.loss_val = self.loss()
@@ -80,23 +81,16 @@ class RNNLangmod():
         self.E = self.weight_variable(
             [self.vocab_size, self.embedding_size], 'Embedding')
 
-        # Basic LSTM Cell
-        self.cell = tf.nn.rnn_cell.BasicLSTMCell(self.hidden)
-        self.initial_state = self.cell.zero_state(self.bsz, tf.float32)
+        # LSTM Cells
+        self.fw_cell = rnn_cell.LSTMCell(self.hidden)
+        self.bw_cell = rnn_cell.LSTMCell(self.hidden)
 
-        # Conv hidden layer
-        self.hidden1_w = self.weight_variable(
-            [self.hidden, self.hidden * 2], 'Hidden1_Weight')
-        self.hidden1_b = self.weight_variable(
-            [self.hidden * 2], 'Hidden1_Bias')
-        self.hidden2_w = self.weight_variable(
-            [self.hidden * 2, self.hidden], 'Hidden2_Weight')
-        self.hidden2_b = self.weight_variable(
-            [self.hidden], 'Hidden2_Bias')
+        self.initial_state_fw = self.fw_cell.zero_state(self.bsz, tf.float32)
+        self.initial_state_bw = self.bw_cell.zero_state(self.bsz, tf.float32)
 
         # Softmax Output
         self.softmax_w = self.weight_variable(
-            [self.hidden, self.vocab_size], 'Softmax_Weight')
+            [self.hidden * 2, self.vocab_size], 'Softmax_Weight')
         self.softmax_b = self.weight_variable(
             [self.vocab_size], 'Softmax_Bias')
 
@@ -114,22 +108,23 @@ class RNNLangmod():
         emb = tf.nn.embedding_lookup(self.E, self.X)
         drop_emb = tf.nn.dropout(emb, self.keep_prob)
 
+        # TODO: ask TA
+        sequence_len = np.ones(self.bsz)
         # Feed input through dynamic_rnn
         # Shape [bsz, steps, hidden]
-        out, f_state = tf.nn.dynamic_rnn(self.cell, drop_emb,
-                                         initial_state=self.initial_state)
-
+        outs, f_states = rnn.bidirectional_dynamic_rnn(
+            self.fw_cell, self.bw_cell, drop_emb,
+            sequence_length=sequence_len,
+            initial_state_fw=self.initial_state_fw,
+            initial_state_bw=self.initial_state_bw)
         # Reshape the outputs into a single 2D Tensor
-        # Shape [bsz * steps, hidden]
-        outputs = tf.reshape(out, [-1, self.hidden])
-
-        h1 = tf.nn.relu(tf.matmul(outputs, self.hidden1_w) + self.hidden1_b)
-        h2 = tf.nn.relu(tf.matmul(h1, self.hidden2_w) + self.hidden2_b)
+        # Shape [bsz * steps, 2 * hidden]
+        outputs = tf.reshape(tf.concat(0, outs), [-1, 2 * self.hidden])
 
         # Feed through final layer, compute logits
-        # Shape [bsz * steps, vocab]
-        logits = tf.matmul(h2, self.softmax_w) + self.softmax_b
-        return logits, f_state
+        logits = tf.matmul(outputs, self.softmax_w) + \
+            self.softmax_b   # Shape [bsz * steps, vocab]
+        return logits, f_states
 
     def loss(self):
         seq_loss = tf.nn.seq2seq.sequence_loss_by_example(
@@ -178,36 +173,39 @@ def read_training():
 test_step_counter = 0
 
 
-def test(rnn_lm, sess, saved_trace=False):
+def test(birnn, sess, saved_trace=False):
     global test_step_counter
     # Evaluate Test Perplexity
     test_loss, test_iters, total_correct, total_blanks = 0., 0, 0., 0
     d = {}  # error test
     for i in range(NUM_CLOZES):
         x, y, choices, keys = read_cloze(i)
-        state = sess.run(rnn_lm.initial_state)
+        state_fw, state_bw = sess.run(
+            [birnn.initial_state_fw, birnn.initial_state_bw])
         blank_i = 0
         for s, e in zip(range(0, len(x - ex_bsz), ex_bsz),
                         range(ex_bsz, len(x), ex_bsz)):
             # Build the Feed Dictionary, with inputs, outputs, dropout
             # probability, and states.
-            feed_dict = {rnn_lm.X: x[s:e].reshape(bsz, steps),
-                         rnn_lm.Y: y[s:e].reshape(bsz, steps),
-                         rnn_lm.keep_prob: 1.0,
-                         rnn_lm.initial_state[0]: state[0],
-                         rnn_lm.initial_state[1]: state[1]}
+            feed_dict = {birnn.X: x[s:e].reshape(bsz, steps),
+                         birnn.Y: y[s:e].reshape(bsz, steps),
+                         birnn.keep_prob: FLAGS.dropout_prob,
+                         birnn.initial_state_fw[0]: state_fw[0],
+                         birnn.initial_state_fw[1]: state_fw[1],
+                         birnn.initial_state_bw[0]: state_bw[0],
+                         birnn.initial_state_bw[1]: state_bw[1]}
             # Fetch the logits, loss, and final state
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
-            logits, curr_loss, state, summaries = sess.run([
-                rnn_lm.logits, rnn_lm.loss_val, rnn_lm.final_state,
-                rnn_lm.summaries],
+            logits, curr_loss, (state_fw, state_bw), summaries = sess.run([
+                birnn.logits, birnn.loss_val, birnn.final_states,
+                birnn.summaries],
                 feed_dict=feed_dict,
                 options=run_options,
                 run_metadata=run_metadata)
+            test_writer.add_summary(summaries)
 
-            test_writer.add_summary(summaries, (test_step_counter + s))
             for batch in range(bsz):
                 if y[s:e][batch] == vocab['BLANK']:
                     choices_d = {j: logits[batch][j]
@@ -226,9 +224,8 @@ def test(rnn_lm, sess, saved_trace=False):
                     blank_i += 1
 
             # Update counters
-            test_loss += curr_loss
             test_iters += steps
-        test_step_counter = test_step_counter + len(x)
+            test_loss += curr_loss
 
     if saved_trace:
         with open('error_analysis', 'wb') as f:
@@ -252,9 +249,9 @@ if __name__ == "__main__":
     print('Launching Tensorflow Session')
     with tf.Session() as sess:
         # Instantiate Model
-        rnn_lm = RNNLangmod(len(vocab), FLAGS.embedding_size, FLAGS.num_steps,
-                            FLAGS.hidden_size, FLAGS.batch_size,
-                            FLAGS.learning_rate)
+        birnn = BiRNN(len(vocab), FLAGS.embedding_size, FLAGS.num_steps,
+                      FLAGS.hidden_size, FLAGS.batch_size,
+                      FLAGS.learning_rate)
 
         # Tensorboard writers
         train_writer = tf.train.SummaryWriter('./tensorboard/train',
@@ -266,23 +263,25 @@ if __name__ == "__main__":
 
         # Start Training
         x, y = read_training()
-        # TODO
-        x = x[:20000]
         for epoch in range(FLAGS.num_epochs):
             # Preprocess and vectorize the data
-            state, loss, iters, start_time = sess.run(
-                rnn_lm.initial_state), 0., 0, time.time()
+            state_fw, state_bw = sess.run(
+                [birnn.initial_state_fw, birnn.initial_state_bw])
+            loss, iters, start_time = sess.run(
+                birnn.initial_state), 0., 0, time.time()
 
             for start, end in zip(range(0, len(x) - ex_bsz, ex_bsz),
                                   range(ex_bsz, len(x), ex_bsz)):
 
                 # Build the Feed Dictionary, with inputs, outputs, dropout
                 # probability, and states.
-                feed_dict = {rnn_lm.X: x[start:end].reshape(bsz, steps),
-                             rnn_lm.Y: y[start:end].reshape(bsz, steps),
-                             rnn_lm.keep_prob: FLAGS.dropout_prob,
-                             rnn_lm.initial_state[0]: state[0],
-                             rnn_lm.initial_state[1]: state[1]}
+                feed_dict = {birnn.X: x[start:end].reshape(bsz, steps),
+                             birnn.Y: y[start:end].reshape(bsz, steps),
+                             birnn.keep_prob: FLAGS.dropout_prob,
+                             birnn.initial_state_fw[0]: state_fw[0],
+                             birnn.initial_state_fw[1]: state_fw[1],
+                             birnn.initial_state_bw[0]: state_bw[0],
+                             birnn.initial_state_bw[1]: state_bw[1]}
 
                 # Run the training operation with the Feed Dictionary,
                 # fetch loss and update state.
@@ -292,18 +291,17 @@ if __name__ == "__main__":
                     run_metadata = tf.RunMetadata()
 
                     curr_loss, _, state, summaries = sess.run([
-                        rnn_lm.loss_val, rnn_lm.train_op,
-                        rnn_lm.final_state, rnn_lm.summaries],
+                        birnn.loss_val, birnn.train_op,
+                        birnn.final_state, birnn.summaries],
                         feed_dict=feed_dict,
                         options=run_options,
                         run_metadata=run_metadata)
 
-                    train_writer.add_summary(
-                        summaries, (epoch * len(x) + start))
+                    train_writer.add_summary(summaries)
                 else:
-                    curr_loss, _, state = sess.run([
-                        rnn_lm.loss_val, rnn_lm.train_op,
-                        rnn_lm.final_state],
+                    curr_loss, _, (state_fw, state_bw) = sess.run([
+                        birnn.loss_val, birnn.train_op,
+                        birnn.final_states],
                         feed_dict=feed_dict)
                 # Update counters
                 loss, iters = loss + curr_loss, iters + steps
@@ -314,8 +312,8 @@ if __name__ == "__main__":
                           .format(epoch, start, end, np.exp(loss / iters),
                                   time.time() - start_time))
                     loss, iters = 0.0, 0
-                    test(rnn_lm, sess)
-        test(rnn_lm, sess, saved_trace=True)
+                    test(birnn, sess)
+        test(birnn, sess, saved_trace=True)
 
         train_writer.close()
         test_writer.close()
