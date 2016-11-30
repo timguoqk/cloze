@@ -2,16 +2,12 @@
 
 ## TODO
 
-- code cleanup
-- git style
-- regex
-- UNK issues
-- bidirectional LSTM
 - multiple words blank
 
 - attention-over-attention
 
 - num-step
+- seq_size
 
 ## Experiments
 - stemming?
