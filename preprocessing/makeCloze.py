@@ -1,6 +1,7 @@
 import os
 import re
 from random import randrange
+import pickle
 
 BOOKS_DIR = '../books/'
 
@@ -34,7 +35,6 @@ def proces_text(text):
     return text
 
 
-
 MIN_INTERVAL = 10
 
 BLANK = '=====BLANK====='
@@ -49,21 +49,27 @@ def isTxt(name):
 filenames = [BOOKS_DIR + f for f in os.listdir(BOOKS_DIR)
              if os.path.isfile(BOOKS_DIR + f) and isTxt(f)]
 
+# Read-in sym and ant dictionary from somewhere
+symMap = {}
+antMap = {}
+
+counter = 1
+
 for filename in filenames:
     with open(filename) as f:
         index = MIN_INTERVAL
-        answers = []
 
         body = proces_text(f.read()).split()
         length = len(body)
 
-        # print(body[:100])
+        answers = []
 
         repeat = 0
         while index < len(body):
             random_index = randrange(index - MIN_INTERVAL, index)
-            if body[random_index] not in KEYWORDS:
-                answers.append(body[random_index])
+            wordToReplace = body[random_index]
+            if wordToReplace not in KEYWORDS:
+                answers.append(wordToReplace)
                 body[random_index] = BLANK
                 index += MIN_INTERVAL
             elif repeat < 3:
@@ -73,8 +79,35 @@ for filename in filenames:
             index += MIN_INTERVAL
             repeat = 0
 
-        # print('\n')
-        print(body[:100])
-        print(answers[:10])
+        with open(str(counter) + '_a', 'wb') as question_file:
+            pickle.dump(body, question_file, 2)
 
-    print('\n\n\n')
+        with open(str(counter) + '_c', 'wb') as answer_file:
+            pickle.dump(answers, answer_file, 2)
+
+        choices = []
+
+        # TODO: still need to handle the  case when we dont have sym or ant
+        for answer in answers:
+            # choiceNeeded = 3
+            thisChoices = []
+            if symMap[answer] is not None:
+                thisChoices = thisChoices + symMap[answer]
+
+            if antMap[answer] is not None:
+                if len(thisChoices) > 2:
+                    thisChoices = thisChoices[:2]
+
+                thisChoices += antMap[answer]
+
+            if len(thisChoices) > 3:
+                thisChoices = thisChoices[:3]
+
+            thisChoices.append(answer)
+
+            choices.append(choices)
+
+        with open(str(counter) + '_b', 'wb') as choices_file:
+            pickle.dump(choices, choices_file, 2)
+
+        counter += 1
