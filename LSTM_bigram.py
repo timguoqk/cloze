@@ -5,7 +5,7 @@ import time
 import pickle
 
 FLAGS = tf.app.flags.FLAGS
-NUM_CLOZES = 1
+NUM_CLOZES = 128
 
 # Model Parameters
 tf.app.flags.DEFINE_integer(
