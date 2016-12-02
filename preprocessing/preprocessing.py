@@ -4,7 +4,7 @@ import pickle
 
 CLOZES_DIR = 'cloze_data/'
 BOOKS_DIR = 'books/'
-PREFIXES = list(map(str, range(1, 41)))
+PREFIXES = list(map(str, range(1, 128)))
 # PREFIXES = ['24']
 
 RE0 = re.compile(r'\[\w+\]')  # num
