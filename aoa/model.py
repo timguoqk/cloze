@@ -1,22 +1,20 @@
 import os
 import time
 import tensorflow as tf
-import numpy as np
 from tensorflow.python.ops import sparse_ops
 from util import softmax, orthogonal_initializer
-import pickle
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_integer('vocab_size', 14061, 'Vocabulary size')
 flags.DEFINE_integer('embedding_size', 384, 'Embedding dimension')
 flags.DEFINE_integer('hidden_size', 256, 'Hidden units')
-flags.DEFINE_integer('batch_size', 32, 'Batch size')
+flags.DEFINE_integer('batch_size', 20, 'Batch size')
 flags.DEFINE_integer('epochs', 2, 'Number of epochs to train/test')
-flags.DEFINE_boolean('training', False, 'Training or testing a model')
+flags.DEFINE_boolean('training', True, 'Training or testing a model')
 flags.DEFINE_string(
-    'name', '', 'Model name (used for statistics and model path')
-flags.DEFINE_float('dropout_keep_prob', 0.9, 'Keep prob for embedding dropout')
+    'name', 'aoa', 'Model name (used for statistics and model path')
+flags.DEFINE_float('dropout_keep_prob', 0.7, 'Keep prob for embedding dropout')
 flags.DEFINE_float('l2_reg', 0.0001, 'l2 regularization for embeddings')
 
 model_path = 'models/' + FLAGS.name
@@ -210,7 +208,7 @@ def main():
                         feed_dict={dataset: 0})
                     elapsed_time, start_time = time.time() - start_time, time.time()
                     print(step, loss_t, acc, elapsed_time)
-                    if step % 100 == 0:
+                    if step % 2 == 0:
                         summary_str = sess.run(summary_op)
                         summary_writer.add_summary(summary_str, step)
                     if step % 1000 == 0:
@@ -228,6 +226,7 @@ def main():
         finally:
             coord.request_stop()
         coord.join(threads)
+        summary_writer.close()
 
 
 if __name__ == "__main__":
