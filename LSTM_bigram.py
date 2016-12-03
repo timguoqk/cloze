@@ -1,6 +1,6 @@
-from tensorflow.python.ops import rnn, rnn_cell
 import numpy as np
 import tensorflow as tf
+from tensorflow.contrib.tensorboard.plugins import projector
 import time
 import pickle
 
@@ -23,6 +23,8 @@ tf.app.flags.DEFINE_float(
     'dropout_prob', 0.5, 'Keep probability, for dropout.')
 tf.app.flags.DEFINE_integer(
     'eval_every', 10000, 'Print statistics every eval_every words.')
+tf.app.flags.DEFINE_integer(
+    'num_lstm', 1, 'Number of LSTM layers.')
 
 
 def variable_summaries(var, name):
@@ -82,8 +84,8 @@ class BiRNN():
             [self.vocab_size, self.embedding_size], 'Embedding')
 
         # LSTM Cells
-        self.fw_cell = rnn_cell.LSTMCell(self.hidden)
-        self.bw_cell = rnn_cell.LSTMCell(self.hidden)
+        self.fw_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
+        self.bw_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
 
         self.initial_state_fw = self.fw_cell.zero_state(self.bsz, tf.float32)
         self.initial_state_bw = self.bw_cell.zero_state(self.bsz, tf.float32)
@@ -112,7 +114,7 @@ class BiRNN():
         sequence_len = np.ones(self.bsz)
         # Feed input through dynamic_rnn
         # Shape [bsz, steps, hidden]
-        outs, f_states = rnn.bidirectional_dynamic_rnn(
+        outs, f_states = tf.nn.bidirectional_dynamic_rnn(
             self.fw_cell, self.bw_cell, drop_emb,
             sequence_length=sequence_len,
             initial_state_fw=self.initial_state_fw,
@@ -254,9 +256,20 @@ if __name__ == "__main__":
                       FLAGS.learning_rate)
 
         # Tensorboard writers
-        train_writer = tf.train.SummaryWriter('./tensorboard/train',
-                                              sess.graph)
+        train_writer = tf.train.SummaryWriter('./tensorboard/train', sess.graph)
         test_writer = tf.train.SummaryWriter('./tensorboard/test', sess.graph)
+
+        # Visualize embeddings
+        saver = tf.train.Saver()
+        config = projector.ProjectorConfig()
+        config.model_checkpoint_path = './model.ckpt'
+        # You can add multiple embeddings. Here we add only one.
+        embedding = config.embeddings.add()
+        embedding.tensor_name = birnn.E.name
+        # Link this tensor to its metadata file (e.g. labels).
+        embedding.metadata_path = './vocab.csv'
+        # Saves a configuration file that TensorBoard will read during startup.
+        projector.visualize_embeddings(train_writer, config)
 
         # Initialize all Variables
         sess.run(tf.initialize_all_variables())
@@ -312,6 +325,8 @@ if __name__ == "__main__":
                                   time.time() - start_time))
                     loss, iters = 0.0, 0
                     test(birnn, sess)
+                    saver.save(sess, 'model.ckpt')
+        saver.save(sess, 'model.ckpt')
         test(birnn, sess, saved_trace=True)
 
         train_writer.close()
