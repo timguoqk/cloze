@@ -49,6 +49,7 @@ def preprocess_clozes():
         }
         with open(p + '_a') as f:
             entry['text'] = proces_text(f.read())
+            entry['text'] += ' STOP' * 20  # Padding to match batch_size
             assert entry['text'].count('BLANK') == 20
 
         with open(p + '_b') as f:
