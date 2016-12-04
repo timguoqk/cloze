@@ -1,9 +1,11 @@
+import json
 import os
 import re
 from random import randrange
 import pickle
 
 BOOKS_DIR = '../books/'
+CLOZE_DIR = '../generated_clozes/'
 
 RE0 = re.compile(r'\[\w+\]')  # num
 RE1 = re.compile(r'\n\n+')
@@ -37,7 +39,7 @@ def proces_text(text):
 
 MIN_INTERVAL = 10
 
-BLANK = '=====BLANK====='
+BLANK = 'BLANK'
 KEYWORDS = ['STOP', 'NUM', 'CHINESE', 'EXCLAMATION', 'QUESTION', 'UNK']
 
 
@@ -53,11 +55,27 @@ filenames = [BOOKS_DIR + f for f in os.listdir(BOOKS_DIR)
 symMap = {}
 antMap = {}
 
+with open('vocab_ant', 'rb') as f:
+    vocab = pickle.load(f)
+
+    for d in vocab:
+        if d is not None:
+            antMap.update(d)
+
+with open('vocab_sym', 'rb') as f:
+    vocab = pickle.load(f)
+
+    for d in vocab:
+        if d is not None:
+            symMap.update(d)
+
+
 counter = 1
 
 for filename in filenames:
+
     with open(filename) as f:
-        index = MIN_INTERVAL
+        index = 100
 
         body = proces_text(f.read()).split()
         length = len(body)
@@ -79,22 +97,25 @@ for filename in filenames:
             index += MIN_INTERVAL
             repeat = 0
 
-        with open(str(counter) + '_a', 'wb') as question_file:
-            pickle.dump(body, question_file, 2)
+        with open(CLOZE_DIR + str(counter) + '_a', 'wb') as question_file:
+            # pickle dump, change open option to 'wb'; json option 'w'
+            pickle.dump(' '.join(body), question_file, 2)
 
-        with open(str(counter) + '_c', 'wb') as answer_file:
+        with open(CLOZE_DIR + str(counter) + '_c', 'wb') as answer_file:
+            # pickle dump
             pickle.dump(answers, answer_file, 2)
 
         choices = []
 
-        # TODO: still need to handle the  case when we dont have sym or ant
+        # TODO: still need to handle the  case when we dont have sym or ant;
+        # right now just pad with more answers
         for answer in answers:
             # choiceNeeded = 3
             thisChoices = []
-            if symMap[answer] is not None:
+            if answer in symMap:
                 thisChoices = thisChoices + symMap[answer]
 
-            if antMap[answer] is not None:
+            if answer in antMap:
                 if len(thisChoices) > 2:
                     thisChoices = thisChoices[:2]
 
@@ -103,11 +124,13 @@ for filename in filenames:
             if len(thisChoices) > 3:
                 thisChoices = thisChoices[:3]
 
-            thisChoices.append(answer)
+            while len(thisChoices) != 4:
+                thisChoices.append(answer)
 
-            choices.append(choices)
+            choices.append(thisChoices)
 
-        with open(str(counter) + '_b', 'wb') as choices_file:
+        with open(CLOZE_DIR + str(counter) + '_b', 'wb') as choices_file:
             pickle.dump(choices, choices_file, 2)
+            # pickle.dump(choices, choices_file, 2)
 
         counter += 1
