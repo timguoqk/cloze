@@ -213,12 +213,19 @@ def test(birnn, sess, saved_trace=False):
                     choices_d = {j: logits[batch][j]
                                  for j in range(len(logits[batch]))
                                  if j in choices[blank_i]}
+                    
                     if saved_trace:
                         d[(i, blank_i)] = {"logits": logits[batch],
                                            "choices": choices_d,
                                            "key": keys[blank_i],
                                            "correct": False}
-                    if choices_d[keys[blank_i]] == max(choices_d.values()):
+                    
+                    choices_d_c = {j: choices_d[j]
+                                    for j in choices_d
+                                    if j != 14060}
+                    if choices_d_c == {}:
+                        choices_d_c = choices_d
+                    if choices_d[keys[blank_i]] == max(choices_d_c.values()):
                         total_correct += 1
                         if saved_trace:
                             d[(i, blank_i)]["correct"] = True
