@@ -1,6 +1,7 @@
 import os
 import time
 import tensorflow as tf
+from tensorflow.contrib.tensorboard.plugins import projector
 from tensorflow.python.ops import sparse_ops
 from util import softmax, orthogonal_initializer
 
@@ -146,8 +147,8 @@ def train(y_hat, regularizer, document, doc_weight, answer, choices):
     indices = tf.gather(flat_choices, index_nam)
 
     # mean cause reg is independent of batch size
-    # loss = -tf.reduce_mean(tf.log(relevant + 1e-10)) + FLAGS.l2_reg * regularizer
-    loss = -tf.reduce_mean(tf.log(relevant + 1e-16)) + tf.reduce_mean(tf.log(relevant_c + 1e-16)) / 4 + FLAGS.l2_reg * regularizer
+    loss = -tf.reduce_mean(tf.log(relevant + 1e-10)) + FLAGS.l2_reg * regularizer
+    # loss = -tf.reduce_mean(tf.log(relevant + 1e-16)) + tf.reduce_mean(tf.log(relevant_c + 1e-16)) / 4 + FLAGS.l2_reg * regularizer
 
     global_step = tf.Variable(0, name="global_step", trainable=False)
 
@@ -179,6 +180,17 @@ def main():
 
     with tf.Session() as sess:
         summary_writer = tf.train.SummaryWriter(model_path, sess.graph)
+        # Visualize embeddings
+        saver = tf.train.Saver()
+        config = projector.ProjectorConfig()
+        # You can add multiple embeddings. Here we add only one.
+        embedding = config.embeddings.add()
+        embedding.tensor_name = 'embedding'
+        embedding.metadata_path = './vocab.csv'
+
+        # Saves a configuration file that TensorBoard will read during startup.
+        projector.visualize_embeddings(summary_writer, config)
+
         saver_variables = tf.all_variables()
         if not FLAGS.training:
             not_included = ['input_producer/limit_epochs/epochs:0',
@@ -190,7 +202,7 @@ def main():
         sess.run([
             tf.initialize_all_variables(),
             tf.initialize_local_variables()])
-        model = tf.train.latest_checkpoint(model_path)
+        model = tf.train.latest_checkpoint(model_path + '/model.ckpt')
         if model:
             print('Restoring ' + model)
             saver.restore(sess, model)
@@ -208,11 +220,11 @@ def main():
                         feed_dict={dataset: 0})
                     elapsed_time, start_time = time.time() - start_time, time.time()
                     print(step, loss_t, acc, elapsed_time)
-                    if step % 2 == 0:
+                    if step % 3 == 0:
                         summary_str = sess.run(summary_op)
                         summary_writer.add_summary(summary_str, step)
-                    if step % 1000 == 0:
-                        saver.save(sess, model_path + '/aoa', global_step=step)
+                    if step % 50 == 1:
+                        saver.save(sess, model_path + '/model.ckpt', global_step=step)
             else:
                 step = 0
                 while not coord.should_stop():
@@ -226,6 +238,7 @@ def main():
         finally:
             coord.request_stop()
         coord.join(threads)
+        saver.save(sess, model_path + '/model.ckpt', global_step=step)
         summary_writer.close()
 
 
