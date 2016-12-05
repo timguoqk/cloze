@@ -185,6 +185,7 @@ def test(birnn, sess, saved_trace=False):
         curr_correct = 0
 
         x, y, choices, keys = read_cloze(i)
+
         state_fw, state_bw = sess.run(
             [birnn.initial_state_fw, birnn.initial_state_bw])
         blank_i = 0
@@ -240,11 +241,18 @@ def test(birnn, sess, saved_trace=False):
             # Update counters
             test_iters += steps
             test_loss += curr_loss
-
+        # config = projector.ProjectorConfig()
+        # config.model_checkpoint_path = './model.ckpt'
+        # # You can add multiple embeddings. Here we add only one.
+        # embedding = config.embeddings.add()
+        # embedding.tensor_name = birnn.E.name
+        # # Link this tensor to its metadata file (e.g. labels).
+        # embedding.metadata_path = './vocab.csv'
+        # # Saves a configuration file that TensorBoard will read during startup.
+        # projector.visualize_embeddings(train_writer, config)
         print(i)
-        with open("survery_results", "a") as f:
-            f.write('Cloze ' + str(i) + ': \n')
-            f.write('Blank Accuracy: {}'.format(curr_correct / curr_blanks))
+        with open("survey_results", "a") as f:
+            f.write('Cloze ' + str(i) + ': {}'.format(curr_correct / curr_blanks))
             f.write('\n')
 
     if saved_trace:
@@ -279,21 +287,23 @@ if __name__ == "__main__":
 
         # Visualize embeddings
         saver = tf.train.Saver()
-        config = projector.ProjectorConfig()
-        config.model_checkpoint_path = './model.ckpt'
-        # You can add multiple embeddings. Here we add only one.
-        embedding = config.embeddings.add()
-        embedding.tensor_name = birnn.E.name
-        # Link this tensor to its metadata file (e.g. labels).
-        embedding.metadata_path = './vocab.csv'
-        # Saves a configuration file that TensorBoard will read during startup.
-        projector.visualize_embeddings(train_writer, config)
+        # config = projector.ProjectorConfig()
+        # config.model_checkpoint_path = './model.ckpt'
+        # # You can add multiple embeddings. Here we add only one.
+        # embedding = config.embeddings.add()
+        # embedding.tensor_name = birnn.E.name
+        # # Link this tensor to its metadata file (e.g. labels).
+        # embedding.metadata_path = './vocab.csv'
+        # # Saves a configuration file that TensorBoard will read during startup.
+        # projector.visualize_embeddings(train_writer, config)
 
         # Initialize all Variables
         sess.run(tf.initialize_all_variables())
 
         # Start Training
         x, y = read_training()
+        x = x[:100000]
+        
         for epoch in range(FLAGS.num_epochs):
             # Preprocess and vectorize the data
             state_fw, state_bw = sess.run(
@@ -342,7 +352,7 @@ if __name__ == "__main__":
                           .format(epoch, start, end, np.exp(loss / iters),
                                   time.time() - start_time))
                     loss, iters = 0.0, 0
-                    test(birnn, sess)
+                    # test(birnn, sess)
                     saver.save(sess, 'model.ckpt')
         saver.save(sess, 'model.ckpt')
         test(birnn, sess, saved_trace=True)
