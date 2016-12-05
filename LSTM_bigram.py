@@ -24,7 +24,7 @@ tf.app.flags.DEFINE_float(
 tf.app.flags.DEFINE_integer(
     'eval_every', 10000, 'Print statistics every eval_every words.')
 tf.app.flags.DEFINE_integer(
-    'num_lstm', 1, 'Number of LSTM layers.')
+    'num_lstm', 2, 'Number of LSTM layers.')
 
 
 def variable_summaries(var, name):
@@ -57,7 +57,6 @@ class BiRNN():
         self.vocab_size, self.embedding_size = vocab_size, embedding_size
         self.hidden, self.num_steps = hidden_size, num_steps
         self.bsz, self.learning_rate = batch_size, learning_rate
-
         # Setup Placeholders
         self.X = tf.placeholder(tf.int32, shape=[None, self.num_steps])
         self.Y = tf.placeholder(tf.int32, shape=[None, self.num_steps])
@@ -84,8 +83,14 @@ class BiRNN():
             [self.vocab_size, self.embedding_size], 'Embedding')
 
         # LSTM Cells
-        self.fw_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
-        self.bw_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
+        # self.fw_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
+        # self.bw_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
+
+        self.fw_lstm_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
+        self.bw_lstm_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
+
+        self.fw_cell = tf.nn.rnn_cell.MultiRNNCell([self.fw_lstm_cell] * FLAGS.num_lstm)
+        self.bw_cell = tf.nn.rnn_cell.MultiRNNCell([self.bw_lstm_cell] * FLAGS.num_lstm)
 
         self.initial_state_fw = self.fw_cell.zero_state(self.bsz, tf.float32)
         self.initial_state_bw = self.bw_cell.zero_state(self.bsz, tf.float32)
@@ -193,9 +198,7 @@ def test(birnn, sess, saved_trace=False):
                          birnn.Y: y[s:e].reshape(bsz, steps),
                          birnn.keep_prob: FLAGS.dropout_prob,
                          birnn.initial_state_fw[0]: state_fw[0],
-                         birnn.initial_state_fw[1]: state_fw[1],
-                         birnn.initial_state_bw[0]: state_bw[0],
-                         birnn.initial_state_bw[1]: state_bw[1]}
+                         birnn.initial_state_bw[0]: state_bw[0]}
             # Fetch the logits, loss, and final state
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
@@ -213,7 +216,6 @@ def test(birnn, sess, saved_trace=False):
                     choices_d = {j: logits[batch][j]
                                  for j in range(len(logits[batch]))
                                  if j in choices[blank_i]}
-                    
                     if saved_trace:
                         d[(i, blank_i)] = {"logits": logits[batch],
                                            "choices": choices_d,
@@ -288,19 +290,17 @@ if __name__ == "__main__":
             state_fw, state_bw = sess.run(
                 [birnn.initial_state_fw, birnn.initial_state_bw])
             loss, iters, start_time = 0., 0, time.time()
-
             for start, end in zip(range(0, len(x) - ex_bsz, ex_bsz),
                                   range(ex_bsz, len(x), ex_bsz)):
 
                 # Build the Feed Dictionary, with inputs, outputs, dropout
                 # probability, and states.
+
                 feed_dict = {birnn.X: x[start:end].reshape(bsz, steps),
                              birnn.Y: y[start:end].reshape(bsz, steps),
                              birnn.keep_prob: FLAGS.dropout_prob,
                              birnn.initial_state_fw[0]: state_fw[0],
-                             birnn.initial_state_fw[1]: state_fw[1],
-                             birnn.initial_state_bw[0]: state_bw[0],
-                             birnn.initial_state_bw[1]: state_bw[1]}
+                             birnn.initial_state_bw[0]: state_bw[0]}
 
                 # Run the training operation with the Feed Dictionary,
                 # fetch loss and update state.
