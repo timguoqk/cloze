@@ -56,16 +56,16 @@ symMap = {}
 antMap = {}
 
 with open('vocab_ant', 'rb') as f:
-    vocab = pickle.load(f)
+    vocab_ant = pickle.load(f)
 
-    for d in vocab:
+    for d in vocab_ant:
         if d is not None:
             antMap.update(d)
 
 with open('vocab_sym', 'rb') as f:
-    vocab = pickle.load(f)
+    vocab_sym = pickle.load(f)
 
-    for d in vocab:
+    for d in vocab_sym:
         if d is not None:
             symMap.update(d)
 
@@ -77,7 +77,7 @@ for filename in filenames:
     with open(filename) as f:
         index = 100
 
-        body = proces_text(f.read()).split()
+        body = proces_text(f.read().lower().strip()).split()
         length = len(body)
 
         answers = []
@@ -99,7 +99,8 @@ for filename in filenames:
 
         with open(CLOZE_DIR + str(counter) + '_a', 'wb') as question_file:
             # pickle dump, change open option to 'wb'; json option 'w'
-            pickle.dump(' '.join(body), question_file, 2)
+            # pickle.dump(' '.join(body), question_file, 2)
+            pickle.dump(body, question_file, 2)
 
         with open(CLOZE_DIR + str(counter) + '_c', 'wb') as answer_file:
             # pickle dump
