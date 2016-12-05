@@ -46,7 +46,7 @@ def convert_books():
             stop_next = next(i for i in range(b + 1, len(article['text_v']) + 1)
                              if i == len(article['text_v']) or article['text_v'][i] == STOP)
             example = tf.train.Example(features=tf.train.Features(feature={
-                'document': _list64(article['text_v']),
+                'document': _list64(article['text_v'][b - 200 : b + 200]),
                 'query': _list64(article['text_v'][stop_prev:stop_next]),
                 'answer': _list64([article['keys_v'][num_b]]),
                 'choices': _list64(article['choices_v'][num_b])
