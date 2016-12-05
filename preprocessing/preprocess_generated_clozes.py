@@ -29,7 +29,13 @@ for p in PREFIXES:
 
         entry['keys_v'] = list(map(lambda x: vocab.get(x, vocab['UNK']), answers))
 
-    assert len(entry['choices_v']) == len(entry['keys_v'])
+    num_of_blanks = entry['text_v'].count(vocab.get('BLANK'))
+    print(num_of_blanks)
+    print(len(entry['choices_v']))
+
+    assert num_of_blanks == len(entry['choices_v']) # number of blanks == number of questions
+    assert len(entry['choices_v']) == len(entry['keys_v']) # number of answers == number of questions
+
     result.append(entry)
 
 print(len(result))
