@@ -11,7 +11,7 @@ flags.DEFINE_integer('vocab_size', 14061, 'Vocabulary size')
 flags.DEFINE_integer('embedding_size', 384, 'Embedding dimension')
 flags.DEFINE_integer('hidden_size', 256, 'Hidden units')
 flags.DEFINE_integer('batch_size', 20, 'Batch size')
-flags.DEFINE_integer('epochs', 2, 'Number of epochs to train/test')
+flags.DEFINE_integer('epochs', 4, 'Number of epochs to train/test')
 flags.DEFINE_boolean('training', True, 'Training or testing a model')
 flags.DEFINE_string(
     'name', 'aoa', 'Model name (used for statistics and model path')

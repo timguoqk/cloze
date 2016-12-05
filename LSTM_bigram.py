@@ -200,14 +200,20 @@ def test(birnn, sess, saved_trace=False):
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
 
-            logits, curr_loss, (state_fw, state_bw), summaries = sess.run([
-                birnn.logits, birnn.loss_val, birnn.final_states,
-                birnn.summaries],
-                feed_dict=feed_dict,
-                options=run_options,
-                run_metadata=run_metadata)
-            test_writer.add_summary(summaries)
-
+            if s % 200 == 0:
+                logits, curr_loss, (state_fw, state_bw), summaries = sess.run([
+                    birnn.logits, birnn.loss_val, birnn.final_states,
+                    birnn.summaries],
+                    feed_dict=feed_dict,
+                    options=run_options,
+                    run_metadata=run_metadata)
+                test_writer.add_summary(summaries)
+            else:
+                logits, curr_loss, (state_fw, state_bw) = sess.run([
+                    birnn.logits, birnn.loss_val, birnn.final_states],
+                    feed_dict=feed_dict,
+                    options=run_options,
+                    run_metadata=run_metadata)
             for batch in range(bsz):
                 if y[s:e][batch] == vocab['BLANK']:
                     choices_d = {j: logits[batch][j]
