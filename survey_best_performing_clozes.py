@@ -181,8 +181,8 @@ def test(birnn, sess, saved_trace=False):
     test_loss, test_iters, total_correct, total_blanks = 0., 0, 0., 0
     d = {}  # error test
     for i in range(NUM_CLOZES):
-        curr_blanks = 0
-        curr_correct = 0
+        curr_blanks = 0.0
+        curr_correct = 0.0
 
         x, y, choices, keys = read_cloze(i)
 
