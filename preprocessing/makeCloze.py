@@ -25,7 +25,6 @@ def proces_text(text):
     text = RE0.sub('NUM', text)
     text = RE1.sub(' STOP ', text)
     text = RE2.sub('a', text)
-    text = RE3.sub(' BLANK ', text)
     text = text.replace('-', ' ')
     text = RE10.sub('NUM', text)
     text = RE4.sub(' CHINESE', text)
@@ -78,7 +77,9 @@ for filename in filenames:
         index = 100
 
         body = proces_text(f.read().lower().strip()).split()
-        length = len(body)
+
+        num_of_blanks = body.count(BLANK)
+        assert body.count(BLANK) == 0
 
         answers = []
 
@@ -97,6 +98,10 @@ for filename in filenames:
             index += MIN_INTERVAL
             repeat = 0
 
+        # Count blanks
+        num_of_blanks = body.count(BLANK)
+        assert num_of_blanks == len(answers)
+
         with open(CLOZE_DIR + str(counter) + '_a', 'wb') as question_file:
             # pickle dump, change open option to 'wb'; json option 'w'
             # pickle.dump(' '.join(body), question_file, 2)
@@ -105,6 +110,8 @@ for filename in filenames:
         with open(CLOZE_DIR + str(counter) + '_c', 'wb') as answer_file:
             # pickle dump
             pickle.dump(answers, answer_file, 2)
+
+
 
         choices = []
 
@@ -128,7 +135,11 @@ for filename in filenames:
             while len(thisChoices) != 4:
                 thisChoices.append(answer)
 
+            assert len(thisChoices) == 4
+
             choices.append(thisChoices)
+
+        assert len(choices) == num_of_blanks
 
         with open(CLOZE_DIR + str(counter) + '_b', 'wb') as choices_file:
             pickle.dump(choices, choices_file, 2)
