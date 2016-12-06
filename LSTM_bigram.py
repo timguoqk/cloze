@@ -5,8 +5,8 @@ import time
 import pickle
 
 FLAGS = tf.app.flags.FLAGS
-NUM_CLOZES = 1
-NUM_TRAINING_CLOZES = 1
+NUM_CLOZES = 10
+NUM_TRAINING_CLOZES = 127
 
 # Model Parameters
 tf.app.flags.DEFINE_integer(
@@ -21,11 +21,11 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_float('learning_rate', 1e-4,
                           'Learning rate for Adam Optimizer.')
 tf.app.flags.DEFINE_float(
-    'dropout_prob', 0.5, 'Keep probability, for dropout.')
+    'dropout_prob', 0.7, 'Keep probability, for dropout.')
 tf.app.flags.DEFINE_integer(
-    'eval_every', 10000, 'Print statistics every eval_every words.')
+    'eval_every', 20000, 'Print statistics every eval_every words.')
 tf.app.flags.DEFINE_integer(
-    'num_lstm', 2, 'Number of LSTM layers.')
+    'num_lstm', 4, 'Number of LSTM layers.')
 
 
 def variable_summaries(var, name):
@@ -90,8 +90,10 @@ class BiRNN():
         self.fw_lstm_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
         self.bw_lstm_cell = tf.nn.rnn_cell.LSTMCell(self.hidden)
 
-        self.fw_cell = tf.nn.rnn_cell.MultiRNNCell([self.fw_lstm_cell] * FLAGS.num_lstm)
-        self.bw_cell = tf.nn.rnn_cell.MultiRNNCell([self.bw_lstm_cell] * FLAGS.num_lstm)
+        self.fw_cell = tf.nn.rnn_cell.MultiRNNCell(
+            [self.fw_lstm_cell] * FLAGS.num_lstm)
+        self.bw_cell = tf.nn.rnn_cell.MultiRNNCell(
+            [self.bw_lstm_cell] * FLAGS.num_lstm)
 
         self.initial_state_fw = self.fw_cell.zero_state(self.bsz, tf.float32)
         self.initial_state_bw = self.bw_cell.zero_state(self.bsz, tf.float32)
@@ -131,7 +133,8 @@ class BiRNN():
             initial_state_bw=self.initial_state_bw)
         # Reshape the outputs into a single 2D Tensor
         # Shape [bsz * steps, 2 * hidden]
-        outputs = tf.transpose(tf.reshape(tf.concat(0, outs), [-1, 2 * self.hidden]))
+        outputs = tf.transpose(tf.reshape(
+            tf.concat(0, outs), [-1, 2 * self.hidden]))
 
         corrected = tf.transpose(tf.matmul(outputs, self.bm_w) + self.bm_b)
 
@@ -175,6 +178,7 @@ def read_cloze(i):
     keys = clozes_data[i]['keys_v']
     return x, y, choices, keys
 
+
 def read_training_cloze(i):
     x = np.array(training_clozes_data[i]['text_v'][:-1], dtype=int)
     y = np.array(training_clozes_data[i]['text_v'][1:], dtype=int)
@@ -193,7 +197,7 @@ def read_training_cloze(i):
 
 
 def read_training():
-    #with open('books_training', 'rb') as f:
+    # with open('books_training', 'rb') as f:
     with open('more_generated_clozes', 'rb') as f:
         books_training = pickle.load(f)
     x = np.array(books_training[:-1])
@@ -219,24 +223,24 @@ def test(birnn, sess, saved_trace=False):
                         range(ex_bsz, len(x), ex_bsz)):
             # Build the Feed Dictionary, with inputs, outputs, dropout
             # probability, and states.
-            newx = x[s:e];
+            newx = x[s:e]
             #print (np.shape(newx))
             #print (newx)
             for batch in range(bsz):
                 if x[s:e][batch] == vocab['BLANK']:
-                    newx = np.append(newx,choices[count_i])
+                    newx = np.append(newx, choices[count_i])
                     count_i += 1
                 else:
-                    newx = np.append(newx,x[s:e][batch])
-                    newx = np.append(newx,x[s:e][batch])
-                    newx = np.append(newx,x[s:e][batch])
-                    newx = np.append(newx,x[s:e][batch])
+                    newx = np.append(newx, x[s:e][batch])
+                    newx = np.append(newx, x[s:e][batch])
+                    newx = np.append(newx, x[s:e][batch])
+                    newx = np.append(newx, x[s:e][batch])
             #print (newx)
             feed_dict = {birnn.X: newx.reshape(bsz, 5 * steps),
-                        birnn.Y: y[s:e].reshape(bsz, steps),
-                        birnn.keep_prob: FLAGS.dropout_prob,
-                        birnn.initial_state_fw[0]: state_fw[0],
-                        birnn.initial_state_bw[0]: state_bw[0]}
+                         birnn.Y: y[s:e].reshape(bsz, steps),
+                         birnn.keep_prob: FLAGS.dropout_prob,
+                         birnn.initial_state_fw[0]: state_fw[0],
+                         birnn.initial_state_bw[0]: state_bw[0]}
             #print ("gets here")
             # Fetch the logits, loss, and final state
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -265,10 +269,10 @@ def test(birnn, sess, saved_trace=False):
                                            "choices": choices_d,
                                            "key": keys[blank_i],
                                            "correct": False}
-                    
+
                     choices_d_c = {j: choices_d[j]
-                                    for j in choices_d
-                                    if j != 14060}
+                                   for j in choices_d
+                                   if j != 14060}
                     if choices_d_c == {}:
                         choices_d_c = choices_d
                     if choices_d[keys[blank_i]] == max(choices_d_c.values()):
@@ -312,20 +316,21 @@ if __name__ == "__main__":
                       FLAGS.learning_rate)
 
         # Tensorboard writers
-        train_writer = tf.train.SummaryWriter('./tensorboard/train', sess.graph)
+        train_writer = tf.train.SummaryWriter(
+            './tensorboard/train', sess.graph)
         test_writer = tf.train.SummaryWriter('./tensorboard/test', sess.graph)
 
         # Visualize embeddings
         saver = tf.train.Saver()
-        # config = projector.ProjectorConfig()
-        # config.model_checkpoint_path = './model.ckpt'
-        # # You can add multiple embeddings. Here we add only one.
-        # embedding = config.embeddings.add()
-        # embedding.tensor_name = birnn.E.name
-        # # Link this tensor to its metadata file (e.g. labels).
-        # embedding.metadata_path = './vocab.csv'
-        # # Saves a configuration file that TensorBoard will read during startup.
-        # projector.visualize_embeddings(train_writer, config)
+        config = projector.ProjectorConfig()
+        config.model_checkpoint_path = './model.ckpt'
+        # You can add multiple embeddings. Here we add only one.
+        embedding = config.embeddings.add()
+        embedding.tensor_name = birnn.E.name
+        # Link this tensor to its metadata file (e.g. labels).
+        embedding.metadata_path = './vocab.csv'
+        # Saves a configuration file that TensorBoard will read during startup.
+        projector.visualize_embeddings(train_writer, config)
 
         # Initialize all Variables
         sess.run(tf.initialize_all_variables())
@@ -346,22 +351,21 @@ if __name__ == "__main__":
                     # Build the Feed Dictionary, with inputs, outputs, dropout
                     # probability, and states.
 
-                    newx = x[start:end];
+                    newx = x[start:end]
                     for batch in range(bsz):
                         if x[start:end][batch] == vocab['BLANK']:
-                            newx = np.append(newx,choices[count_i])
+                            newx = np.append(newx, choices[count_i])
                             count_i += 1
                         else:
-                            newx = np.append(newx,x[start:end][batch])
-                            newx = np.append(newx,x[start:end][batch])
-                            newx = np.append(newx,x[start:end][batch])
-                            newx = np.append(newx,x[start:end][batch])
-                    #print (newx)
+                            newx = np.append(newx, x[start:end][batch])
+                            newx = np.append(newx, x[start:end][batch])
+                            newx = np.append(newx, x[start:end][batch])
+                            newx = np.append(newx, x[start:end][batch])
                     feed_dict = {birnn.X: newx.reshape(bsz, 5 * steps),
-                        birnn.Y: y[start:end].reshape(bsz, steps),
-                        birnn.keep_prob: FLAGS.dropout_prob,
-                        birnn.initial_state_fw[0]: state_fw[0],
-                        birnn.initial_state_bw[0]: state_bw[0]}
+                                 birnn.Y: y[start:end].reshape(bsz, steps),
+                                 birnn.keep_prob: FLAGS.dropout_prob,
+                                 birnn.initial_state_fw[0]: state_fw[0],
+                                 birnn.initial_state_bw[0]: state_bw[0]}
 
                     # Run the training operation with the Feed Dictionary,
                     # fetch loss and update state.
