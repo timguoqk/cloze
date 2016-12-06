@@ -243,8 +243,8 @@ def test(birnn, sess, saved_trace=False):
 
         print(i)
         with open("survery_results", "a") as f:
-            f.write('Cloze ' + str(i) + ': \n')
-            f.write('Blank Accuracy: {}'.format(curr_correct / curr_blanks))
+            f.write('Cloze ' + str(i) + ': .format(curr_correct / curr_blanks)')
+            # f.write('Blank Accuracy: {}'.format(curr_correct / curr_blanks))
             f.write('\n')
 
     if saved_trace:
@@ -294,6 +294,8 @@ if __name__ == "__main__":
 
         # Start Training
         x, y = read_training()
+        x = x[:100000]
+
         for epoch in range(FLAGS.num_epochs):
             # Preprocess and vectorize the data
             state_fw, state_bw = sess.run(
@@ -342,7 +344,7 @@ if __name__ == "__main__":
                           .format(epoch, start, end, np.exp(loss / iters),
                                   time.time() - start_time))
                     loss, iters = 0.0, 0
-                    test(birnn, sess)
+                    # test(birnn, sess)
                     saver.save(sess, 'model.ckpt')
         saver.save(sess, 'model.ckpt')
         test(birnn, sess, saved_trace=True)
