@@ -5,6 +5,8 @@ import pickle
 CLOZES_DIR = 'cloze_data/'
 BOOKS_DIR = 'books/'
 PREFIXES = list(map(str, range(1, 128)))
+
+GOOD_TESTS = [1,4,7,8,18,19,30,47,66,68,89,91,102,125]
 # PREFIXES = ['24']
 
 RE0 = re.compile(r'\[\w+\]')  # num
@@ -39,8 +41,12 @@ def proces_text(text):
 
 def preprocess_clozes():
     result = []
+    test_result = []
+
     RE_CHOICES = re.compile(r'[A-D]\. ((?:[\w\-\'’]+ )+)')
     for p in PREFIXES:
+        currCloze = p
+
         p = CLOZES_DIR + p
         entry = {
             'text': '',
@@ -67,7 +73,11 @@ def preprocess_clozes():
             entry['keys'] = [entry['choices'][i][ord(k) - ord('A')]
                              for i, k in enumerate(keys)]
             assert len(entry['keys']) == 20
-        result.append(entry)
+
+        if int(currCloze) in GOOD_TESTS:
+            test_result.append(entry)
+        else:
+            result.append(entry)
 
     for entry in result:
         entry['text_v'] = [vocab.get(word, vocab['UNK'])
@@ -78,8 +88,26 @@ def preprocess_clozes():
         ]
         entry['keys_v'] = [vocab.get(word.split()[0], vocab['UNK'])
                            for word in entry['keys']]
+
+    for entry in test_result:
+        entry['text_v'] = [vocab.get(word, vocab['UNK'])
+                           for word in entry['text'].split()]
+        entry['choices_v'] = [
+            [vocab.get(word.split()[0], vocab['UNK']) for word in choices]
+            for choices in entry['choices']
+        ]
+        entry['keys_v'] = [vocab.get(word.split()[0], vocab['UNK'])
+                           for word in entry['keys']]
+
+    print(len(test_result))
+    print(len(GOOD_TESTS))
+    assert len(test_result) == len(GOOD_TESTS)
+
+
     with open('clozes', 'wb') as f:
         pickle.dump(result, f, 2)
+    with open('test_clozes', 'wb') as f:
+        pickle.dump(test_result, f, 2)
 
 
 def preprocess_books():
@@ -99,4 +127,4 @@ if __name__ == '__main__':
         vocab = pickle.load(f)
 
     preprocess_clozes()
-    preprocess_books()
+    # preprocess_books()
