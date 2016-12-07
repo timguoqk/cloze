@@ -5,8 +5,8 @@ import time
 import pickle
 
 FLAGS = tf.app.flags.FLAGS
-NUM_CLOZES = 10
-NUM_TRAINING_CLOZES = 127
+NUM_CLOZES = 14
+NUM_TRAINING_CLOZES = 127 - 14 + 15
 
 # Model Parameters
 tf.app.flags.DEFINE_integer(
@@ -172,6 +172,13 @@ class BiRNN():
 
 
 def read_cloze(i):
+    x = np.array(test_clozes_data[i]['text_v'][:-1], dtype=int)
+    y = np.array(test_clozes_data[i]['text_v'][1:], dtype=int)
+    choices = test_clozes_data[i]['choices_v']
+    keys = test_clozes_data[i]['keys_v']
+    return x, y, choices, keys
+
+def read_127jian14_cloze(i):
     x = np.array(clozes_data[i]['text_v'][:-1], dtype=int)
     y = np.array(clozes_data[i]['text_v'][1:], dtype=int)
     choices = clozes_data[i]['choices_v']
@@ -180,6 +187,8 @@ def read_cloze(i):
 
 
 def read_training_cloze(i):
+    if i <= 127:
+        return read_127jian14_cloze(i)
     x = np.array(training_clozes_data[i]['text_v'][:-1], dtype=int)
     y = np.array(training_clozes_data[i]['text_v'][1:], dtype=int)
     choices = training_clozes_data[i]['choices_v']
@@ -297,6 +306,8 @@ def test(birnn, sess, saved_trace=False):
 # Global variables
 ex_bsz, bsz, steps = FLAGS.batch_size * \
     FLAGS.num_steps, FLAGS.batch_size, FLAGS.num_steps
+with open('test_clozes', 'rb') as f:
+    test_clozes_data = pickle.load(f)
 with open('clozes', 'rb') as f:
     clozes_data = pickle.load(f)
 with open('vocab', 'rb') as f:
@@ -322,15 +333,15 @@ if __name__ == "__main__":
 
         # Visualize embeddings
         saver = tf.train.Saver()
-        config = projector.ProjectorConfig()
-        config.model_checkpoint_path = './model.ckpt'
-        # You can add multiple embeddings. Here we add only one.
-        embedding = config.embeddings.add()
-        embedding.tensor_name = birnn.E.name
-        # Link this tensor to its metadata file (e.g. labels).
-        embedding.metadata_path = './vocab.csv'
-        # Saves a configuration file that TensorBoard will read during startup.
-        projector.visualize_embeddings(train_writer, config)
+        # config = projector.ProjectorConfig()
+        # config.model_checkpoint_path = './model.ckpt'
+        # # You can add multiple embeddings. Here we add only one.
+        # embedding = config.embeddings.add()
+        # embedding.tensor_name = birnn.E.name
+        # # Link this tensor to its metadata file (e.g. labels).
+        # embedding.metadata_path = './vocab.csv'
+        # # Saves a configuration file that TensorBoard will read during startup.
+        # projector.visualize_embeddings(train_writer, config)
 
         # Initialize all Variables
         sess.run(tf.initialize_all_variables())
