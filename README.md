@@ -1,13 +1,7 @@
 # Cloze
 
-## TODO
+To run LSTM ngram model: `python LSTM_bigram.py`.
 
-- multiple words blank
+To run AoA model: `python aoa/model.py`.
 
-- attention-over-attention
-
-- num-step
-- seq_size
-
-## Experiments
-- stemming?
+The code requires TF R0.12
